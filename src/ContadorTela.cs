@@ -76,6 +76,8 @@ namespace Overlay
         }
 
         // Quadros por segundo no monitor do jogo, ou null sem dados recentes.
+        // Desconta as atualizações do próprio overlay (ver RegistrarAtualizacaoPropria): sem isso o FPS sairia ~+2 com o jogo
+        // parado ou abaixo da taxa do monitor (prova em tests\ProvaFpsTela.cs).
         public int? Fps()
         {
             long agora = Qpc();
@@ -85,9 +87,21 @@ namespace Overlay
                 Podar(agora);
                 int total = 0;
                 foreach (KeyValuePair<long, int> q in quadros) total += q.Value;
-                return total;
+                while (proprias.Count > 0 && MsEntre(proprias.Peek(), agora) > JanelaMs) proprias.Dequeue();
+                return Math.Max(0, total - proprias.Count);
             }
         }
+
+        readonly Queue<long> proprias = new Queue<long>();
+
+        // O overlay chama a cada redesenho; só conta se ele estiver no monitor medido.
+        public void RegistrarAtualizacaoPropria(IntPtr janelaOverlay)
+        {
+            if (MonitorFromWindow(janelaOverlay, 2) != monitorMedido) return;
+            lock (trava) proprias.Enqueue(Qpc());
+        }
+
+        volatile IntPtr monitorMedido;
 
         void Loop()
         {
@@ -150,6 +164,7 @@ namespace Overlay
                 Checar(Metodo<FnQueryInterface>(saida, VtQueryInterface)(saida, ref iid, out saida1), "IDXGIOutput1");
                 Checar(Metodo<FnDuplicateOutput>(saida1, VtOutput1DuplicateOutput)(saida1, dispositivo, out duplicacao), "DuplicateOutput");
                 UltimoErro = null;
+                monitorMedido = monitorDuplicado;
 
                 FnAcquireNextFrame adquirir = Metodo<FnAcquireNextFrame>(duplicacao, VtDuplicationAcquireNextFrame);
                 FnReleaseFrame soltar = Metodo<FnReleaseFrame>(duplicacao, VtDuplicationReleaseFrame);

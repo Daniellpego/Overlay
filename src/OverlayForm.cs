@@ -296,6 +296,8 @@ namespace Overlay
                     // Mantém o WinForms com os mesmos limites; senão um Show()/Hide() posterior volta a janela ao tamanho padrão.
                     if (Bounds != limites) Bounds = limites;
                     Native.DesenharJanela(Handle, bmp, limites.Location);
+                    // Cada redesenho muda a tela: o contador desconta para não somar o próprio overlay ao FPS do jogo.
+                    if (contadorTela != null) contadorTela.RegistrarAtualizacaoPropria(Handle);
                 }
             }
         }
