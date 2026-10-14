@@ -24,6 +24,7 @@ Overlay leve p/ jogos Windows 11. Escopo, restrições, critérios de falha em `
 - Erro não tratado → `overlay.log`, nunca caixa de diálogo no meio do jogo.
 
 ## Forma de trabalhar
+- Responder ao Daniel SEMPRE em português do Brasil (texto, recaps, perguntas e botões), mesmo com ferramentas/relatórios em inglês.
 - Uma etapa do `CONTRATO.md` por vez, commit ao fim de cada.
 - Prints de teste (`tests\ultimo-print.png`) capturam tela do Daniel: não comentar nada além do overlay.
 - Validação pelo Daniel: botões neutros (sem resposta de sucesso pré-preenchida) e pedir o `overlay.log`; nunca apagar o log antes de ele testar.
