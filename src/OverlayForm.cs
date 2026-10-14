@@ -24,6 +24,7 @@ namespace Overlay
         readonly ToolStripMenuItem itemInicioAutomatico;
         bool atalhoRegistrado;
         readonly LeitorFps leitorFps = new LeitorFps();
+        ContadorTela contadorTela;
         readonly Stopwatch relogio = Stopwatch.StartNew();
         readonly DetectorServidor detectorServidor = new DetectorServidor();
         readonly MedidorPing medidorPing;
@@ -121,6 +122,7 @@ namespace Overlay
             leitorFps.Dispose();
             medidorPing.Dispose();
             if (monitorRede != null) monitorRede.Dispose();
+            if (contadorTela != null) contadorTela.Dispose();
             bandeja.Visible = false;
             base.OnFormClosed(e);
         }
@@ -134,6 +136,7 @@ namespace Overlay
                 leitorFps.Dispose();
                 medidorPing.Dispose();
                 if (monitorRede != null) monitorRede.Dispose();
+                if (contadorTela != null) contadorTela.Dispose();
             }
             base.Dispose(disposing);
         }
@@ -163,7 +166,8 @@ namespace Overlay
 
         List<Trecho> MontarTrechos()
         {
-            int? fps = leitorFps.Estado == EstadoFps.SemAdmin ? null : leitorFps.Fps();
+            bool pelaTela;
+            int? fps = LerFps(out pelaTela);
             int? ms;
             OrigemPing origem;
             medidorPing.Ler(out ms, out origem);
@@ -171,8 +175,9 @@ namespace Overlay
 
             return new List<Trecho>
             {
-                new Trecho(TextoFps(fps), Faixas.CorFps(fps, config)),
-                new Trecho(" FPS | ", config.CorTexto),
+                new Trecho(pelaTela ? TextoNumero(fps) : TextoFps(fps), Faixas.CorFps(fps, config)),
+                // "FPS*" = medido pela tela (plano B): conta o que chega ao monitor, com teto na taxa de atualização dele.
+                new Trecho(pelaTela ? " FPS* | " : " FPS | ", config.CorTexto),
                 new Trecho(TextoPing(ms, origem), Faixas.CorPing(ms, config)),
                 new Trecho(" | " + hora, config.CorTexto)
             };
@@ -185,12 +190,36 @@ namespace Overlay
             return Math.Min(ms.Value, 999).ToString().PadLeft(3) + (origem == OrigemPing.ServidorDoJogo ? " ms" : " ms*");
         }
 
+        // PresentMon (FPS do jogo em primeiro plano) normalmente. Quando o Windows recusa a sessão dele mesmo como admin
+        // (anticheat do FC 27) e fps_pela_tela = sim, usa o ContadorTela. Ele só existe enquanto o bloqueio durar
+        // (custa ~20-30 MB de RAM do Direct3D e ~0,5% de CPU).
+        int? LerFps(out bool pelaTela)
+        {
+            pelaTela = leitorFps.Bloqueado && config.FpsPelaTela;
+            if (!pelaTela)
+            {
+                if (contadorTela != null) { contadorTela.Dispose(); contadorTela = null; }
+                return leitorFps.Estado == EstadoFps.SemAdmin ? null : leitorFps.Fps();
+            }
+            if (contadorTela == null)
+            {
+                contadorTela = new ContadorTela();
+                contadorTela.Iniciar();
+            }
+            return contadorTela.Fps();
+        }
+
         string TextoFps(int? fps)
         {
             if (leitorFps.Estado == EstadoFps.SemAdmin) return "ADM";
             // BLQ = o Windows recusou a leitura de quadros mesmo como admin (ex.: anticheat do FC 27 aberto).
             if (leitorFps.Bloqueado && !fps.HasValue) return "BLQ";
-            // Largura fixa de 3 caracteres para o overlay não "pular" quando o FPS muda de 99 para 100.
+            return TextoNumero(fps);
+        }
+
+        // Largura fixa de 3 caracteres para o overlay não "pular" quando o FPS muda de 99 para 100.
+        static string TextoNumero(int? fps)
+        {
             return fps.HasValue ? Math.Min(fps.Value, 999).ToString().PadLeft(3) : "---";
         }
 

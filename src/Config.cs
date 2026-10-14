@@ -19,6 +19,7 @@ namespace Overlay
         public bool MostrarSegundos = false;
         public string AlvoPing = "1.1.1.1";
         public bool DetectarServidorJogo = true;
+        public bool FpsPelaTela = true;
         public string AtalhoOcultar = "Ctrl+Shift+F10";
         public bool CoresPorFaixa = true;
         public int FpsBom = 60;
@@ -88,6 +89,7 @@ namespace Overlay
                 case "alvo_ping": if (valor.Length > 0) AlvoPing = valor; break;
                 case "detectar_servidor_jogo": DetectarServidorJogo = Booleano(valor, DetectarServidorJogo); break;
                 case "atalho_ocultar": AtalhoOcultar = valor; break;
+                case "fps_pela_tela": FpsPelaTela = Booleano(valor, FpsPelaTela); break;
                 case "cores_por_faixa": CoresPorFaixa = Booleano(valor, CoresPorFaixa); break;
                 case "fps_bom": FpsBom = Inteiro(valor, FpsBom, 1, 1000); break;
                 case "fps_ruim": FpsRuim = Inteiro(valor, FpsRuim, 1, 1000); break;

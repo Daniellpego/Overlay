@@ -35,5 +35,10 @@ elevada e inicia com o Windows. Config dela em `%LOCALAPPDATA%\Overlay` (só lid
 4. Ajustes — **código pronto, testes automáticos OK (atalho testado de verdade); falta o Daniel testar o atalho dentro do jogo e o "Iniciar com o Windows" (admin)**:
    atalho global (`atalho_ocultar`, padrão Ctrl+Shift+F10, via RegisterHotKey); cores por faixa de FPS/ping;
    "Iniciar com o Windows" no menu do ícone = tarefa agendada no logon com privilégio mais alto (sobe como admin sem UAC).
+   **FC 27 (2026-10-14):** com o jogo aberto, o anticheat da EA faz o Windows recusar QUALQUER sessão ETW, mesmo como admin
+   (`diagnosticar.bat`: até sessão vazia do `logman` dá "Acesso negado"). PresentMon e detecção do servidor ficam bloqueados (`BLQ`, `ms*`).
+   Plano B: `ContadorTela` conta os quadros que chegam ao monitor pela Desktop Duplication (API do OBS/Discord, sem tocar no jogo
+   e sem ETW) e mostra `FPS*`. Medido com o FC aberto: funciona, ~0,5% CPU. Limites: teto = taxa do monitor (240 Hz),
+   conta a tela inteira, +20-30 MB de RAM só enquanto o bloqueio durar. Falta validar com limitador de FPS no FC.
 5. Revisão independente (subagente de contexto limpo) — **feita em 2026-10-14: 10 achados, 1–9 corrigidos** (10, DPI por monitor, adiado).
    Falta: `verificar-admin.bat` (CPU/RAM com tudo ligado), revalidar a detecção do servidor e o teste de 1 h jogando.

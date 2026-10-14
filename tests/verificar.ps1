@@ -57,13 +57,17 @@ RodarTeste 'TesteRede' @('src\DetectorServidor.cs', 'src\MedidorPing.cs', 'src\L
 RodarTeste 'TesteSessaoEtw' @('src\MonitorRede.cs', 'src\SessaoEtw.cs', 'src\DetectorServidor.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\TesteSessaoEtw.cs')
 RodarTeste 'TesteEtapa4' @('src\Atalho.cs', 'src\Faixas.cs', 'src\Config.cs', 'src\InicioAutomatico.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\TesteEtapa4.cs')
 
-foreach ($outro in Get-Process Overlay -ErrorAction SilentlyContinue) {
-    try { $outro.Kill(); [void]$outro.WaitForExit(3000) }
-    catch {
-        # Overlay instalado rodando como admin: sem admin não dá para fechá-lo, e o mutex faria a cópia de teste sair na hora.
-        Write-Host '[PULADO] testes da janela: feche o overlay que esta rodando (icone da bandeja > Sair) e rode de novo.'
-        if ($falhas -gt 0) { Write-Host "$falhas falha(s)"; exit 1 } else { Write-Host 'Tudo OK (sem os testes da janela)'; exit 0 }
+# Só fecha cópias de teste desta pasta. NUNCA fecha o overlay do Daniel (instalado ou de caminho desconhecido):
+# em 2026-10-14 este script derrubou o overlay instalado duas vezes no meio do jogo.
+$exeTeste = (Resolve-Path $exe).Path
+foreach ($outro in Get-CimInstance Win32_Process -Filter "Name='Overlay.exe'") {
+    if ($outro.ExecutablePath -and $outro.ExecutablePath -ieq $exeTeste) {
+        Stop-Process -Id $outro.ProcessId -Force -ErrorAction SilentlyContinue
+        continue
     }
+    # O mutex de instância única faria a cópia de teste sair na hora; sem fechar o do Daniel, os testes da janela ficam para depois.
+    Write-Host '[PULADO] testes da janela: ha um overlay seu aberto (instalado). Feche pela bandeja > Sair e rode de novo.'
+    if ($falhas -gt 0) { Write-Host "$falhas falha(s)"; exit 1 } else { Write-Host 'Tudo OK (sem os testes da janela)'; exit 0 }
 }
 $focoAntes = [W]::GetForegroundWindow()
 $proc = Start-Process $exe -PassThru

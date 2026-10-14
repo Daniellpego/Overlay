@@ -27,6 +27,8 @@ Overlay leve p/ jogos Windows 11. Escopo, restrições, critérios de falha em `
 - Responder ao Daniel SEMPRE em português do Brasil (texto, recaps, perguntas e botões), mesmo com ferramentas/relatórios em inglês.
 - Uma etapa do `CONTRATO.md` por vez, commit ao fim de cada.
 - Prints de teste (`tests\ultimo-print.png`) capturam tela do Daniel: não comentar nada além do overlay.
+- Testes NUNCA fecham o overlay instalado do Daniel (derrubaram duas vezes no meio do jogo): só a cópia de teste da pasta.
+- Medir o plano B do FPS na tela real: compilar `tests\MedirTela.cs` com `src\ContadorTela.cs` e rodar `MedirTela.exe 10 FC27` (não precisa admin).
 - Validação pelo Daniel: botões neutros (sem resposta de sucesso pré-preenchida) e pedir o `overlay.log`; nunca apagar o log antes de ele testar.
 - Commit: mensagem via arquivo (`git commit -F`), UTF-8 sem BOM — aspas na mensagem quebram o argumento no PowerShell 5.1.
 
