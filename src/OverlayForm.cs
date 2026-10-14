@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -14,11 +15,14 @@ namespace Overlay
         const int PaddingX = 8;
         const int PaddingY = 4;
         const int RaioBorda = 6;
+        const int IdAtalhoOcultar = 1;
 
         Config config;
         readonly Timer timer;
         readonly NotifyIcon bandeja;
         readonly ToolStripMenuItem itemMostrar;
+        readonly ToolStripMenuItem itemInicioAutomatico;
+        bool atalhoRegistrado;
         readonly LeitorFps leitorFps = new LeitorFps();
         readonly Stopwatch relogio = Stopwatch.StartNew();
         readonly DetectorServidor detectorServidor = new DetectorServidor();
@@ -53,6 +57,9 @@ namespace Overlay
             menu.Items.Add(itemMostrar);
             if (leitorFps.Estado == EstadoFps.SemAdmin)
                 menu.Items.Add("Reiniciar como administrador (FPS)", null, (s, e) => ReiniciarComoAdmin());
+            itemInicioAutomatico = new ToolStripMenuItem("Iniciar com o Windows", null, (s, e) => AlternarInicioAutomatico());
+            menu.Items.Add(itemInicioAutomatico);
+            menu.Opening += (s, e) => AtualizarItemInicioAutomatico();
             menu.Items.Add("Recarregar config.ini", null, (s, e) => RecarregarConfig());
             menu.Items.Add("Abrir config.ini", null, (s, e) => AbrirConfig());
             menu.Items.Add(new ToolStripSeparator());
@@ -96,6 +103,7 @@ namespace Overlay
             base.OnShown(e);
             Redesenhar(true);
             timer.Start();
+            RegistrarAtalho();
 
             if (leitorFps.Estado == EstadoFps.SemAdmin)
                 bandeja.ShowBalloonTip(5000, "Overlay sem FPS",
@@ -109,6 +117,7 @@ namespace Overlay
         {
             SystemEvents.DisplaySettingsChanged -= AoMudarTela;
             timer.Stop();
+            DesregistrarAtalho();
             leitorFps.Dispose();
             medidorPing.Dispose();
             if (monitorRede != null) monitorRede.Dispose();
@@ -145,26 +154,40 @@ namespace Overlay
             }
         }
 
-        string MontarTexto()
+        struct Trecho
         {
-            string hora = DateTime.Now.ToString(config.MostrarSegundos ? "HH:mm:ss" : "HH:mm");
-            return TextoFps() + " FPS | " + TextoPing() + " | " + hora;
+            public string Texto;
+            public Color Cor;
+            public Trecho(string texto, Color cor) { Texto = texto; Cor = cor; }
         }
 
-        string TextoPing()
+        List<Trecho> MontarTrechos()
         {
+            int? fps = leitorFps.Estado == EstadoFps.SemAdmin ? null : leitorFps.Fps();
             int? ms;
             OrigemPing origem;
             medidorPing.Ler(out ms, out origem);
+            string hora = DateTime.Now.ToString(config.MostrarSegundos ? "HH:mm:ss" : "HH:mm");
+
+            return new List<Trecho>
+            {
+                new Trecho(TextoFps(fps), Faixas.CorFps(fps, config)),
+                new Trecho(" FPS | ", config.CorTexto),
+                new Trecho(TextoPing(ms, origem), Faixas.CorPing(ms, config)),
+                new Trecho(" | " + hora, config.CorTexto)
+            };
+        }
+
+        static string TextoPing(int? ms, OrigemPing origem)
+        {
             if (!ms.HasValue) return "--- ms";
             // "*" = não é o servidor da partida (sem partida detectada ou servidor que bloqueia ping): é o alvo_ping do config.
             return Math.Min(ms.Value, 999).ToString().PadLeft(3) + (origem == OrigemPing.ServidorDoJogo ? " ms" : " ms*");
         }
 
-        string TextoFps()
+        string TextoFps(int? fps)
         {
             if (leitorFps.Estado == EstadoFps.SemAdmin) return "ADM";
-            int? fps = leitorFps.Fps();
             // Largura fixa de 3 caracteres para o overlay não "pular" quando o FPS muda de 99 para 100.
             return fps.HasValue ? Math.Min(fps.Value, 999).ToString().PadLeft(3) : "---";
         }
@@ -189,22 +212,34 @@ namespace Overlay
 
         void Redesenhar(bool forcar)
         {
-            string texto = MontarTexto();
-            if (!forcar && texto == ultimoTexto) return;
-            ultimoTexto = texto;
+            List<Trecho> trechos = MontarTrechos();
+            var chave = new System.Text.StringBuilder();
+            foreach (Trecho t in trechos) chave.Append(t.Texto).Append('|').Append(t.Cor.ToArgb()).Append(';');
+            if (!forcar && chave.ToString() == ultimoTexto) return;
+            ultimoTexto = chave.ToString();
 
             using (var fonte = new Font(config.Fonte, config.TamanhoFonte, FontStyle.Bold, GraphicsUnit.Point))
             using (var formato = new StringFormat(StringFormat.GenericTypographic))
             {
-                Size medida;
+                // Sem MeasureTrailingSpaces o GDI+ ignora os espaços no fim de cada trecho e os pedaços se sobrepõem.
+                formato.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces;
+
+                var larguras = new float[trechos.Count];
+                float larguraTexto = 0, alturaTexto = 0;
                 using (var medidor = new Bitmap(1, 1))
                 using (var g = Graphics.FromImage(medidor))
                 {
                     g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-                    medida = Size.Ceiling(g.MeasureString(texto, fonte, PointF.Empty, formato));
+                    for (int i = 0; i < trechos.Count; i++)
+                    {
+                        SizeF tamanho = g.MeasureString(trechos[i].Texto, fonte, PointF.Empty, formato);
+                        larguras[i] = tamanho.Width;
+                        larguraTexto += tamanho.Width;
+                        alturaTexto = Math.Max(alturaTexto, tamanho.Height);
+                    }
                 }
-                int largura = medida.Width + PaddingX * 2;
-                int altura = medida.Height + PaddingY * 2;
+                int largura = (int)Math.Ceiling(larguraTexto) + PaddingX * 2;
+                int altura = (int)Math.Ceiling(alturaTexto) + PaddingY * 2;
 
                 using (var bmp = new Bitmap(largura, altura, PixelFormat.Format32bppArgb))
                 {
@@ -218,8 +253,13 @@ namespace Overlay
                         using (var forma = Retangulo(new Rectangle(0, 0, largura - 1, altura - 1), RaioBorda))
                             g.FillPath(fundo, forma);
 
-                        using (var pincel = new SolidBrush(config.CorTexto))
-                            g.DrawString(texto, fonte, pincel, PaddingX, PaddingY, formato);
+                        float x = PaddingX;
+                        for (int i = 0; i < trechos.Count; i++)
+                        {
+                            using (var pincel = new SolidBrush(trechos[i].Cor))
+                                g.DrawString(trechos[i].Texto, fonte, pincel, x, PaddingY, formato);
+                            x += larguras[i];
+                        }
                     }
                     var limites = new Rectangle(Posicao(largura, altura), bmp.Size);
                     // Mantém o WinForms com os mesmos limites; senão um Show()/Hide() posterior volta a janela ao tamanho padrão.
@@ -270,6 +310,8 @@ namespace Overlay
         {
             config = Config.Carregar();
             medidorPing.DefinirAlvoReserva(config.AlvoPing);
+            DesregistrarAtalho();
+            RegistrarAtalho();
             Redesenhar(true);
         }
 
@@ -282,6 +324,58 @@ namespace Overlay
         void AoMudarTela(object sender, EventArgs e)
         {
             Redesenhar(true);
+        }
+
+        void RegistrarAtalho()
+        {
+            string texto = config.AtalhoOcultar.Trim();
+            if (texto.Length == 0 || texto.ToLowerInvariant() == "nenhum") return;
+
+            uint modificadores, tecla;
+            if (!Atalho.TentarLer(texto, out modificadores, out tecla))
+            {
+                Log.Mensagem("atalho_ocultar invalido: '" + texto + "'. Use algo como Ctrl+Shift+F10.");
+                return;
+            }
+            atalhoRegistrado = Native.RegisterHotKey(Handle, IdAtalhoOcultar, modificadores, tecla);
+            if (!atalhoRegistrado)
+                Log.Mensagem("Nao foi possivel registrar o atalho '" + texto + "' (outro programa ja usa?). Erro " +
+                    System.Runtime.InteropServices.Marshal.GetLastWin32Error() + ".");
+        }
+
+        void DesregistrarAtalho()
+        {
+            if (!atalhoRegistrado) return;
+            Native.UnregisterHotKey(Handle, IdAtalhoOcultar);
+            atalhoRegistrado = false;
+        }
+
+        // RegisterHotKey é tratado pelo próprio Windows: funciona com o jogo em foco, sem gancho de teclado nem injeção.
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == Native.WM_HOTKEY && m.WParam.ToInt32() == IdAtalhoOcultar)
+            {
+                AlternarVisivel();
+                return;
+            }
+            base.WndProc(ref m);
+        }
+
+        void AtualizarItemInicioAutomatico()
+        {
+            itemInicioAutomatico.Checked = InicioAutomatico.EstaAtivo();
+            itemInicioAutomatico.Enabled = LeitorFps.EhAdministrador();
+            itemInicioAutomatico.ToolTipText = itemInicioAutomatico.Enabled ? "" :
+                "Abra o overlay pelo iniciar.bat (administrador) para mudar esta opção.";
+        }
+
+        void AlternarInicioAutomatico()
+        {
+            bool ok = InicioAutomatico.EstaAtivo()
+                ? InicioAutomatico.Desativar()
+                : InicioAutomatico.Ativar(Application.ExecutablePath);
+            if (!ok)
+                bandeja.ShowBalloonTip(5000, "Overlay", "Não foi possível mudar o início automático. Detalhes em overlay.log.", ToolTipIcon.Warning);
         }
     }
 }

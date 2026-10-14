@@ -19,6 +19,11 @@ public static class W {
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
     [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(PT p);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+    public static void CtrlShiftF10() {
+        keybd_event(0x11, 0, 0, UIntPtr.Zero); keybd_event(0x10, 0, 0, UIntPtr.Zero); keybd_event(0x79, 0, 0, UIntPtr.Zero);
+        keybd_event(0x79, 0, 2, UIntPtr.Zero); keybd_event(0x10, 0, 2, UIntPtr.Zero); keybd_event(0x11, 0, 2, UIntPtr.Zero);
+    }
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
     public static List<IntPtr> Janelas(uint pid) {
         var lista = new List<IntPtr>();
@@ -49,6 +54,7 @@ function RodarTeste($nome, $fontes) {
 }
 RodarTeste 'TesteCalculadoraFps' @('src\CalculadoraFps.cs', 'tests\TesteCalculadoraFps.cs')
 RodarTeste 'TesteRede' @('src\DetectorServidor.cs', 'src\MedidorPing.cs', 'src\Log.cs', 'tests\TesteRede.cs')
+RodarTeste 'TesteEtapa4' @('src\Atalho.cs', 'src\Faixas.cs', 'src\Config.cs', 'src\InicioAutomatico.cs', 'src\Log.cs', 'tests\TesteEtapa4.cs')
 
 Get-Process Overlay -ErrorAction SilentlyContinue | Stop-Process -Force
 $focoAntes = [W]::GetForegroundWindow()
@@ -92,6 +98,15 @@ $cpuPct = (($proc.TotalProcessorTime - $cpu0).TotalMilliseconds / 4000) / [Envir
 $ramMb = [math]::Round($proc.WorkingSet64 / 1MB, 1)
 Checar 'CPU < 1%' ($cpuPct -lt 1) ("({0:N3}%)" -f $cpuPct)
 Checar 'RAM < 50 MB' ($ramMb -lt 50) "($ramMb MB)"
+
+# Atalho padrão do config.ini (Ctrl+Shift+F10) oculta e mostra de novo.
+[W]::CtrlShiftF10(); Start-Sleep -Milliseconds 700
+Checar 'atalho oculta o overlay' (-not [W]::IsWindowVisible($h)) ''
+[W]::CtrlShiftF10(); Start-Sleep -Milliseconds 700
+Checar 'atalho mostra de novo' ([W]::IsWindowVisible($h)) ''
+$r2 = New-Object W+RECT
+[W]::GetWindowRect($h, [ref]$r2) | Out-Null
+Checar 'volta no mesmo lugar e tamanho' (($r2.L -eq $r.L) -and ($r2.T -eq $r.T) -and ($r2.R -eq $r.R)) "($($r2.L),$($r2.T))"
 
 $proc2 = Start-Process $exe -PassThru
 Start-Sleep -Seconds 1

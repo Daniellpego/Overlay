@@ -19,6 +19,15 @@ namespace Overlay
         public bool MostrarSegundos = false;
         public string AlvoPing = "1.1.1.1";
         public bool DetectarServidorJogo = true;
+        public string AtalhoOcultar = "Ctrl+Shift+F10";
+        public bool CoresPorFaixa = true;
+        public int FpsBom = 60;
+        public int FpsRuim = 30;
+        public int PingBom = 60;
+        public int PingRuim = 120;
+        public Color CorBom = Color.FromArgb(76, 217, 100);
+        public Color CorMedio = Color.FromArgb(255, 214, 10);
+        public Color CorRuim = Color.FromArgb(255, 69, 58);
 
         public static string Caminho
         {
@@ -42,6 +51,7 @@ namespace Overlay
                 string valor = linha.Substring(igual + 1).Trim();
                 c.Aplicar(chave, valor);
             }
+            c.CorrigirFaixas();
             return c;
         }
 
@@ -65,7 +75,24 @@ namespace Overlay
                 case "mostrar_segundos": MostrarSegundos = Booleano(valor, MostrarSegundos); break;
                 case "alvo_ping": if (valor.Length > 0) AlvoPing = valor; break;
                 case "detectar_servidor_jogo": DetectarServidorJogo = Booleano(valor, DetectarServidorJogo); break;
+                case "atalho_ocultar": AtalhoOcultar = valor; break;
+                case "cores_por_faixa": CoresPorFaixa = Booleano(valor, CoresPorFaixa); break;
+                case "fps_bom": FpsBom = Inteiro(valor, FpsBom, 1, 1000); break;
+                case "fps_ruim": FpsRuim = Inteiro(valor, FpsRuim, 1, 1000); break;
+                case "ping_bom": PingBom = Inteiro(valor, PingBom, 1, 1000); break;
+                case "ping_ruim": PingRuim = Inteiro(valor, PingRuim, 1, 1000); break;
+                case "cor_bom": CorBom = Cor(valor, CorBom); break;
+                case "cor_medio": CorMedio = Cor(valor, CorMedio); break;
+                case "cor_ruim": CorRuim = Cor(valor, CorRuim); break;
             }
+        }
+
+        // Faixas invertidas (ex.: fps_ruim maior que fps_bom) tornariam as cores sem sentido: volta ao padrão.
+        void CorrigirFaixas()
+        {
+            var padrao = new Config();
+            if (FpsRuim > FpsBom) { FpsBom = padrao.FpsBom; FpsRuim = padrao.FpsRuim; }
+            if (PingBom > PingRuim) { PingBom = padrao.PingBom; PingRuim = padrao.PingRuim; }
         }
 
         static int Inteiro(string valor, int padrao, int min, int max)

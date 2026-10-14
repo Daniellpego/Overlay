@@ -24,8 +24,10 @@ Overlay minúsculo no canto da tela mostrando horário, ping e FPS real enquanto
 1. Janela + relógio + config.ini — **feita** (`tests\verificar.ps1` passa).
 2. FPS real via PresentMon (jogo em primeiro plano, admin) — **código pronto, testes automáticos OK; falta validar num jogo com limitador de FPS** (`iniciar.bat`).
    Sem admin o overlay mostra `ADM` e oferece "Reiniciar como administrador" no menu do ícone. **Validado pelo Daniel num jogo com limitador.**
-3. Ping — **código pronto, testes automáticos OK (ping real ao alvo fixo incluso); falta validar a detecção do servidor numa partida (admin).**
+3. Ping — **validado pelo Daniel numa partida (perdeu o `*` e bateu com o ping do jogo).**
    v2: `MonitorRede` lê eventos ETW de envio UDP (Kernel-Network) e `DetectorServidor` escolhe o IP público com mais pacotes do processo em primeiro plano.
    Servidor que não responde ICMP (comum) → mostra o `alvo_ping` com `ms*`.
-4. Ajustes: atalho para ocultar, cores por faixa de FPS/ping, iniciar com o Windows.
+4. Ajustes — **código pronto, testes automáticos OK (atalho testado de verdade); falta o Daniel testar o atalho dentro do jogo e o "Iniciar com o Windows" (admin)**:
+   atalho global (`atalho_ocultar`, padrão Ctrl+Shift+F10, via RegisterHotKey); cores por faixa de FPS/ping;
+   "Iniciar com o Windows" no menu do ícone = tarefa agendada no logon com privilégio mais alto (sobe como admin sem UAC).
 5. Revisão independente (subagente de contexto limpo) + teste de 1 h jogando.
