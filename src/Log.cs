@@ -17,12 +17,24 @@ namespace Overlay
             Mensagem(ex == null ? "Erro desconhecido" : ex.ToString());
         }
 
+        // Mesma mensagem só uma vez a cada 10 min: com o FC aberto as tentativas de 1 em 1 min encheriam o log.
+        static readonly TimeSpan IntervaloRepeticao = TimeSpan.FromMinutes(10);
+        static readonly System.Collections.Generic.Dictionary<string, DateTime> ultimaVez =
+            new System.Collections.Generic.Dictionary<string, DateTime>();
+
         public static void Mensagem(string texto)
         {
             try
             {
                 lock (trava)
-                    File.AppendAllText(Caminho, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "  " + texto + Environment.NewLine);
+                {
+                    DateTime agora = DateTime.Now;
+                    DateTime anterior;
+                    if (ultimaVez.TryGetValue(texto, out anterior) && agora - anterior < IntervaloRepeticao) return;
+                    if (ultimaVez.Count > 50) ultimaVez.Clear();
+                    ultimaVez[texto] = agora;
+                    File.AppendAllText(Caminho, agora.ToString("yyyy-MM-dd HH:mm:ss") + "  " + texto + Environment.NewLine);
+                }
             }
             catch (Exception)
             {

@@ -188,6 +188,8 @@ namespace Overlay
         string TextoFps(int? fps)
         {
             if (leitorFps.Estado == EstadoFps.SemAdmin) return "ADM";
+            // BLQ = o Windows recusou a leitura de quadros mesmo como admin (ex.: anticheat do FC 27 aberto).
+            if (leitorFps.Bloqueado && !fps.HasValue) return "BLQ";
             // Largura fixa de 3 caracteres para o overlay não "pular" quando o FPS muda de 99 para 100.
             return fps.HasValue ? Math.Min(fps.Value, 999).ToString().PadLeft(3) : "---";
         }

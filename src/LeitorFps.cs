@@ -31,6 +31,14 @@ namespace Overlay
 
         public EstadoFps Estado { get; private set; }
 
+        // true quando o Windows recusou a sessão ETW do PresentMon (mesmo como admin). Volta a false quando os dados voltam.
+        volatile bool bloqueado;
+        public bool Bloqueado
+        {
+            get { return bloqueado; }
+            private set { bloqueado = value; }
+        }
+
         public static bool EhAdministrador()
         {
             using (WindowsIdentity identidade = WindowsIdentity.GetCurrent())
@@ -163,6 +171,7 @@ namespace Overlay
                 bool cabecalhoConferido = false;
                 while ((linha = p.StandardOutput.ReadLine()) != null)
                 {
+                    Bloqueado = false;
                     calculadora.ProcessarLinha(linha, relogio.Elapsed.TotalMilliseconds);
                     if (!cabecalhoConferido && calculadora.ErroCabecalho != null)
                     {
@@ -176,7 +185,14 @@ namespace Overlay
                 if (!encerrando)
                 {
                     lock (ultimosErros)
-                        Log.Mensagem("PresentMon saiu com codigo " + p.ExitCode + ": " + string.Join(" | ", ultimosErros.ToArray()));
+                    {
+                        string erros = string.Join(" | ", ultimosErros.ToArray());
+                        // "access denied" mesmo como admin = o Windows está recusando sessões ETW (com o FC 27 aberto,
+                        // o anticheat da EA faz isso; ver CONTRATO.md). O overlay mostra BLQ e segue tentando.
+                        Bloqueado = erros.IndexOf("access denied", StringComparison.OrdinalIgnoreCase) >= 0;
+                        Log.Mensagem("PresentMon saiu com codigo " + p.ExitCode + ": " + erros);
+                        ultimosErros.Clear();
+                    }
                 }
             }
         }
