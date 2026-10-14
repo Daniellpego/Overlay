@@ -7,7 +7,7 @@ namespace Overlay
 {
     // Lógica pura: recebe "o processo X mandou um pacote UDP para o IP Y" e aponta o servidor da partida
     // (o IP público que mais recebeu pacotes do processo em primeiro plano nos últimos segundos).
-    // Testada em tests\TesteDetectorServidor.cs.
+    // Testada em tests\TesteRede.cs.
     class DetectorServidor
     {
         public const double JanelaMs = 5000;
@@ -16,7 +16,13 @@ namespace Overlay
 
         readonly object trava = new object();
         readonly Dictionary<IPAddress, Queue<double>> pacotesPorIp = new Dictionary<IPAddress, Queue<double>>();
-        int pidAlvo;
+        volatile int pidAlvo;
+
+        // Leitura sem trava para o callback ETW descartar cedo os pacotes de outros processos.
+        public bool EhAlvo(int pid)
+        {
+            return pid != 0 && pid == pidAlvo;
+        }
 
         public void DefinirAlvo(int pid)
         {

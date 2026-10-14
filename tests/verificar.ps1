@@ -53,8 +53,9 @@ function RodarTeste($nome, $fontes) {
     Checar $nome ($LASTEXITCODE -eq 0) ''
 }
 RodarTeste 'TesteCalculadoraFps' @('src\CalculadoraFps.cs', 'tests\TesteCalculadoraFps.cs')
-RodarTeste 'TesteRede' @('src\DetectorServidor.cs', 'src\MedidorPing.cs', 'src\Log.cs', 'tests\TesteRede.cs')
-RodarTeste 'TesteEtapa4' @('src\Atalho.cs', 'src\Faixas.cs', 'src\Config.cs', 'src\InicioAutomatico.cs', 'src\Log.cs', 'tests\TesteEtapa4.cs')
+RodarTeste 'TesteRede' @('src\DetectorServidor.cs', 'src\MedidorPing.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\TesteRede.cs')
+RodarTeste 'TesteSessaoEtw' @('src\MonitorRede.cs', 'src\SessaoEtw.cs', 'src\DetectorServidor.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\TesteSessaoEtw.cs')
+RodarTeste 'TesteEtapa4' @('src\Atalho.cs', 'src\Faixas.cs', 'src\Config.cs', 'src\InicioAutomatico.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\TesteEtapa4.cs')
 
 Get-Process Overlay -ErrorAction SilentlyContinue | Stop-Process -Force
 $focoAntes = [W]::GetForegroundWindow()

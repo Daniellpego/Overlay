@@ -318,7 +318,8 @@ namespace Overlay
         void AbrirConfig()
         {
             if (!System.IO.File.Exists(Config.Caminho)) return;
-            Process.Start("notepad.exe", "\"" + Config.Caminho + "\"");
+            // Caminho absoluto: "notepad.exe" sozinho seria procurado primeiro na pasta do overlay.
+            Process.Start(System.IO.Path.Combine(Environment.SystemDirectory, "notepad.exe"), "\"" + Config.Caminho + "\"");
         }
 
         void AoMudarTela(object sender, EventArgs e)
@@ -363,10 +364,16 @@ namespace Overlay
 
         void AtualizarItemInicioAutomatico()
         {
-            itemInicioAutomatico.Checked = InicioAutomatico.EstaAtivo();
-            itemInicioAutomatico.Enabled = LeitorFps.EhAdministrador();
-            itemInicioAutomatico.ToolTipText = itemInicioAutomatico.Enabled ? "" :
-                "Abra o overlay pelo iniciar.bat (administrador) para mudar esta opção.";
+            bool ativo = InicioAutomatico.EstaAtivo();
+            itemInicioAutomatico.Checked = ativo;
+            // Fora do Program Files dá para desligar uma tarefa antiga, mas não criar uma nova.
+            itemInicioAutomatico.Enabled = LeitorFps.EhAdministrador() && (Pastas.Instalado || ativo);
+            if (!Pastas.Instalado)
+                itemInicioAutomatico.ToolTipText = "Só a cópia instalada (tools\\instalar.ps1) pode iniciar com o Windows.";
+            else if (!LeitorFps.EhAdministrador())
+                itemInicioAutomatico.ToolTipText = "Abra o overlay pelo iniciar.bat (administrador) para mudar esta opção.";
+            else
+                itemInicioAutomatico.ToolTipText = "";
         }
 
         void AlternarInicioAutomatico()

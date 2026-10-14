@@ -5,6 +5,8 @@ Overlay minúsculo no canto da tela mostrando horário, ping e FPS real enquanto
 
 ## Restrições
 - Zero injeção no jogo e zero leitura de memória dele. FPS vem dos eventos ETW do Windows via PresentMon (Intel).
+  Exceção aceita (revisão da etapa 5): o PresentMon abre um handle só de consulta (`PROCESS_QUERY_LIMITED_INFORMATION`,
+  o mesmo do Gerenciador de Tarefas) em cada processo que apresenta frames, para saber quando ele termina. Inevitável pela CLI.
 - Clique atravessa, sempre por cima, fora da barra de tarefas e do Alt+Tab, nunca rouba o foco.
 - < 1% de CPU e < 50 MB de RAM.
 - C# compilado pelo `csc.exe` do .NET Framework 4.x que vem no Windows; sem SDK.
@@ -12,6 +14,8 @@ Overlay minúsculo no canto da tela mostrando horário, ping e FPS real enquanto
 
 ## Formato
 `E:\overlay` com código, `CLAUDE.md`, `config.ini` e `iniciar.bat` (roda como admin).
+Uso diário: cópia instalada em `C:\Program Files\Overlay` (`instalar.bat`), pasta que só admin altera — é ela que roda
+elevada e inicia com o Windows. Config dela em `%LOCALAPPDATA%\Overlay` (só lido); log em `C:\Program Files\Overlay\log`.
 
 ## Falhou se
 - FPS diverge > 5% do limitador do jogo.
@@ -24,10 +28,12 @@ Overlay minúsculo no canto da tela mostrando horário, ping e FPS real enquanto
 1. Janela + relógio + config.ini — **feita** (`tests\verificar.ps1` passa).
 2. FPS real via PresentMon (jogo em primeiro plano, admin) — **código pronto, testes automáticos OK; falta validar num jogo com limitador de FPS** (`iniciar.bat`).
    Sem admin o overlay mostra `ADM` e oferece "Reiniciar como administrador" no menu do ícone. **Validado pelo Daniel num jogo com limitador.**
-3. Ping — **validado pelo Daniel numa partida (perdeu o `*` e bateu com o ping do jogo).**
+3. Ping — ping ao alvo fixo funciona. **A detecção do servidor nunca funcionou até a etapa 5** (OpenTrace ligava à versão
+   ANSI; achado 1 da revisão). O teste da etapa 3 relatado como OK não é compatível com aquele código. Corrigido; revalidar numa partida.
    v2: `MonitorRede` lê eventos ETW de envio UDP (Kernel-Network) e `DetectorServidor` escolhe o IP público com mais pacotes do processo em primeiro plano.
    Servidor que não responde ICMP (comum) → mostra o `alvo_ping` com `ms*`.
 4. Ajustes — **código pronto, testes automáticos OK (atalho testado de verdade); falta o Daniel testar o atalho dentro do jogo e o "Iniciar com o Windows" (admin)**:
    atalho global (`atalho_ocultar`, padrão Ctrl+Shift+F10, via RegisterHotKey); cores por faixa de FPS/ping;
    "Iniciar com o Windows" no menu do ícone = tarefa agendada no logon com privilégio mais alto (sobe como admin sem UAC).
-5. Revisão independente (subagente de contexto limpo) + teste de 1 h jogando.
+5. Revisão independente (subagente de contexto limpo) — **feita em 2026-10-14: 10 achados, 1–9 corrigidos** (10, DPI por monitor, adiado).
+   Falta: `verificar-admin.bat` (CPU/RAM com tudo ligado), revalidar a detecção do servidor e o teste de 1 h jogando.

@@ -9,7 +9,7 @@ namespace Overlay
 
         public static string Caminho
         {
-            get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "overlay.log"); }
+            get { return Path.Combine(Pastas.Log, "overlay.log"); }
         }
 
         public static void Erro(Exception ex)

@@ -17,6 +17,10 @@ static class TesteEtapa4
         TestarFaixas();
         TestarConfigFaixasInvertidas();
         TestarXmlTarefa();
+        TestarSchtasksLeXmlProtegido();
+        // Revisão etapa 5, achado 2: fora do Program Files a tarefa elevada não pode ser criada.
+        Checar("fora do Program Files recusa iniciar com o Windows",
+            !Pastas.Instalado && !InicioAutomatico.Ativar(@"E:\overlay\Overlay.exe"), "");
 
         Console.WriteLine(falhas == 0 ? "Etapa 4: tudo OK" : "Etapa 4: " + falhas + " falha(s)");
         return falhas == 0 ? 0 : 1;
@@ -85,6 +89,50 @@ static class TesteEtapa4
         finally
         {
             File.Delete(caminho);
+        }
+    }
+
+    // Revisão etapa 5, bug novo A: com handle de escrita aberto o schtasks dizia "arquivo em uso" e a tarefa nunca era criada.
+    // O XML aqui é inválido de propósito: o schtasks lê o arquivo e recusa o conteúdo, sem criar tarefa nenhuma.
+    static void TestarSchtasksLeXmlProtegido()
+    {
+        string caminho = Path.Combine(Path.GetTempPath(), "overlay-teste-" + Path.GetRandomFileName() + ".xml");
+        try
+        {
+            string erro;
+            using (FileStream protegido = InicioAutomatico.AbrirXmlProtegido(caminho, "<Task>xml invalido de teste"))
+            {
+                var info = new System.Diagnostics.ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "schtasks.exe"),
+                    "/Create /TN \"OverlayTesteNuncaCriada\" /XML \"" + caminho + "\"")
+                { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true, RedirectStandardOutput = true };
+                using (var p = System.Diagnostics.Process.Start(info))
+                {
+                    p.StandardOutput.ReadToEnd();
+                    erro = p.StandardError.ReadToEnd();
+                    p.WaitForExit();
+                }
+                Checar("xml protegido continua travado contra escrita", !PodeEscrever(caminho), "");
+            }
+            bool emUso = erro.IndexOf("outro processo", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         erro.IndexOf("another process", StringComparison.OrdinalIgnoreCase) >= 0;
+            Checar("schtasks consegue ler o xml protegido", !emUso, "(" + erro.Trim() + ")");
+        }
+        finally
+        {
+            File.Delete(caminho);
+        }
+    }
+
+    static bool PodeEscrever(string caminho)
+    {
+        try
+        {
+            using (new FileStream(caminho, FileMode.Open, FileAccess.Write, FileShare.ReadWrite)) { }
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
         }
     }
 

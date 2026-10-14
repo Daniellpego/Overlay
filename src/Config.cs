@@ -31,15 +31,27 @@ namespace Overlay
 
         public static string Caminho
         {
-            get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.ini"); }
+            get { return Path.Combine(Pastas.Config, "config.ini"); }
         }
 
         public static Config Carregar()
         {
             var c = new Config();
-            if (!File.Exists(Caminho)) return c;
+            string[] linhas;
+            try
+            {
+                if (!File.Exists(Caminho)) return c;
+                linhas = File.ReadAllLines(Caminho);
+            }
+            catch (Exception ex)
+            {
+                // Config bloqueado por outro programa ou sem permissão: abre com o padrão em vez de não abrir.
+                if (!(ex is IOException) && !(ex is UnauthorizedAccessException)) throw;
+                Log.Mensagem("Nao foi possivel ler config.ini (" + ex.Message + "); usando o padrao.");
+                return c;
+            }
 
-            foreach (string bruta in File.ReadAllLines(Caminho))
+            foreach (string bruta in linhas)
             {
                 string linha = bruta.Trim();
                 if (linha.Length == 0 || linha[0] == '#' || linha[0] == ';') continue;
