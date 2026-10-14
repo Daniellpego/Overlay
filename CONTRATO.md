@@ -22,7 +22,8 @@ Overlay minúsculo no canto da tela mostrando horário, ping e FPS real enquanto
 
 ## Etapas
 1. Janela + relógio + config.ini — **feita** (`tests\verificar.ps1` passa).
-2. FPS real via PresentMon (jogo em primeiro plano, admin).
+2. FPS real via PresentMon (jogo em primeiro plano, admin) — **código pronto, testes automáticos OK; falta validar num jogo com limitador de FPS** (`iniciar.bat`).
+   Sem admin o overlay mostra `ADM` e oferece "Reiniciar como administrador" no menu do ícone.
 3. Ping (v1 alvo fixo; v2 servidor da partida).
 4. Ajustes: atalho para ocultar, cores por faixa de FPS/ping, iniciar com o Windows.
 5. Revisão independente (subagente de contexto limpo) + teste de 1 h jogando.

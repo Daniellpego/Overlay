@@ -19,6 +19,7 @@ namespace Overlay
         readonly Timer timer;
         readonly NotifyIcon bandeja;
         readonly ToolStripMenuItem itemMostrar;
+        readonly LeitorFps leitorFps = new LeitorFps();
         string ultimoTexto;
         int ticksDesdeTopo;
 
@@ -31,9 +32,13 @@ namespace Overlay
             StartPosition = FormStartPosition.Manual;
             TopMost = true;
 
+            leitorFps.Iniciar();
+
             itemMostrar = new ToolStripMenuItem("Ocultar overlay", null, (s, e) => AlternarVisivel());
             var menu = new ContextMenuStrip();
             menu.Items.Add(itemMostrar);
+            if (leitorFps.Estado == EstadoFps.SemAdmin)
+                menu.Items.Add("Reiniciar como administrador (FPS)", null, (s, e) => ReiniciarComoAdmin());
             menu.Items.Add("Recarregar config.ini", null, (s, e) => RecarregarConfig());
             menu.Items.Add("Abrir config.ini", null, (s, e) => AbrirConfig());
             menu.Items.Add(new ToolStripSeparator());
@@ -77,12 +82,20 @@ namespace Overlay
             base.OnShown(e);
             Redesenhar(true);
             timer.Start();
+
+            if (leitorFps.Estado == EstadoFps.SemAdmin)
+                bandeja.ShowBalloonTip(5000, "Overlay sem FPS",
+                    "Para medir o FPS, abra pelo iniciar.bat (pede administrador) ou use o menu do ícone.", ToolTipIcon.Info);
+            else if (leitorFps.Estado == EstadoFps.SemPresentMon)
+                bandeja.ShowBalloonTip(5000, "Overlay sem FPS",
+                    "PresentMon não encontrado. Rode tools\\baixar-presentmon.ps1.", ToolTipIcon.Warning);
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             SystemEvents.DisplaySettingsChanged -= AoMudarTela;
             timer.Stop();
+            leitorFps.Dispose();
             bandeja.Visible = false;
             base.OnFormClosed(e);
         }
@@ -93,6 +106,7 @@ namespace Overlay
             {
                 timer.Dispose();
                 bandeja.Dispose();
+                leitorFps.Dispose();
             }
             base.Dispose(disposing);
         }
@@ -100,6 +114,7 @@ namespace Overlay
         void Tick()
         {
             if (!Visible) return;
+            leitorFps.DefinirProcessoAlvo(Native.ProcessoEmPrimeiroPlano());
             Redesenhar(false);
 
             // Alguns jogos em tela cheia sem borda se colocam por cima; reafirmar o topo a cada ~2 s é barato.
@@ -113,8 +128,34 @@ namespace Overlay
         string MontarTexto()
         {
             string hora = DateTime.Now.ToString(config.MostrarSegundos ? "HH:mm:ss" : "HH:mm");
-            // FPS e ping entram nas etapas 2 e 3.
-            return "--- FPS | -- ms | " + hora;
+            // Ping entra na etapa 3.
+            return TextoFps() + " FPS | -- ms | " + hora;
+        }
+
+        string TextoFps()
+        {
+            if (leitorFps.Estado == EstadoFps.SemAdmin) return "ADM";
+            int? fps = leitorFps.Fps();
+            // Largura fixa de 3 caracteres para o overlay não "pular" quando o FPS muda de 99 para 100.
+            return fps.HasValue ? Math.Min(fps.Value, 999).ToString().PadLeft(3) : "---";
+        }
+
+        void ReiniciarComoAdmin()
+        {
+            var info = new ProcessStartInfo(Application.ExecutablePath, Program.ArgumentoReiniciando)
+            {
+                UseShellExecute = true,
+                Verb = "runas"
+            };
+            try
+            {
+                Process.Start(info);
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                return; // UAC recusado: continua rodando como está.
+            }
+            Close();
         }
 
         void Redesenhar(bool forcar)

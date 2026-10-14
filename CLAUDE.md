@@ -8,6 +8,7 @@ Overlay leve p/ jogos Windows 11. Escopo, restrições, critérios de falha em `
   Sandbox Claude Code: antes definir `TEMP`/`TMP` = `E:\overlay\.tmp` (Add-Type não escreve no TEMP padrão).
 - PresentMon: `tools\baixar-presentmon.ps1` (confere SHA-256 + assinatura Intel).
 - Etapa pronta só com: compilar sem erro + `tests\verificar.ps1` dando "Tudo OK".
+- Uso real: `iniciar.bat` (UAC/admin, exigido pelo PresentMon). Sessão do Claude Code não é admin → FPS real só o Daniel valida; lógica de FPS fica em `CalculadoraFps` (testável sem admin).
 
 ## Convenções
 - C# 5 (csc .NET Framework 4.x): sem `$""`, `?.`, `nameof`, propriedades `=>`.
