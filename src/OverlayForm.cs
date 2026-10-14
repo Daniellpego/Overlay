@@ -20,6 +20,10 @@ namespace Overlay
         readonly NotifyIcon bandeja;
         readonly ToolStripMenuItem itemMostrar;
         readonly LeitorFps leitorFps = new LeitorFps();
+        readonly Stopwatch relogio = Stopwatch.StartNew();
+        readonly DetectorServidor detectorServidor = new DetectorServidor();
+        readonly MedidorPing medidorPing;
+        MonitorRede monitorRede;
         string ultimoTexto;
         int ticksDesdeTopo;
 
@@ -33,6 +37,16 @@ namespace Overlay
             TopMost = true;
 
             leitorFps.Iniciar();
+
+            bool detectar = config.DetectarServidorJogo && LeitorFps.EhAdministrador();
+            if (detectar)
+            {
+                monitorRede = new MonitorRede(detectorServidor, relogio);
+                if (!monitorRede.Iniciar()) monitorRede = null;
+            }
+            medidorPing = new MedidorPing(config.AlvoPing,
+                monitorRede == null ? (Func<System.Net.IPAddress>)null : () => detectorServidor.Servidor(relogio.Elapsed.TotalMilliseconds));
+            medidorPing.Iniciar();
 
             itemMostrar = new ToolStripMenuItem("Ocultar overlay", null, (s, e) => AlternarVisivel());
             var menu = new ContextMenuStrip();
@@ -96,6 +110,8 @@ namespace Overlay
             SystemEvents.DisplaySettingsChanged -= AoMudarTela;
             timer.Stop();
             leitorFps.Dispose();
+            medidorPing.Dispose();
+            if (monitorRede != null) monitorRede.Dispose();
             bandeja.Visible = false;
             base.OnFormClosed(e);
         }
@@ -107,6 +123,8 @@ namespace Overlay
                 timer.Dispose();
                 bandeja.Dispose();
                 leitorFps.Dispose();
+                medidorPing.Dispose();
+                if (monitorRede != null) monitorRede.Dispose();
             }
             base.Dispose(disposing);
         }
@@ -114,7 +132,9 @@ namespace Overlay
         void Tick()
         {
             if (!Visible) return;
-            leitorFps.DefinirProcessoAlvo(Native.ProcessoEmPrimeiroPlano());
+            int pidFrente = Native.ProcessoEmPrimeiroPlano();
+            leitorFps.DefinirProcessoAlvo(pidFrente);
+            detectorServidor.DefinirAlvo(pidFrente);
             Redesenhar(false);
 
             // Alguns jogos em tela cheia sem borda se colocam por cima; reafirmar o topo a cada ~2 s é barato.
@@ -128,8 +148,17 @@ namespace Overlay
         string MontarTexto()
         {
             string hora = DateTime.Now.ToString(config.MostrarSegundos ? "HH:mm:ss" : "HH:mm");
-            // Ping entra na etapa 3.
-            return TextoFps() + " FPS | -- ms | " + hora;
+            return TextoFps() + " FPS | " + TextoPing() + " | " + hora;
+        }
+
+        string TextoPing()
+        {
+            int? ms;
+            OrigemPing origem;
+            medidorPing.Ler(out ms, out origem);
+            if (!ms.HasValue) return "--- ms";
+            // "*" = não é o servidor da partida (sem partida detectada ou servidor que bloqueia ping): é o alvo_ping do config.
+            return Math.Min(ms.Value, 999).ToString().PadLeft(3) + (origem == OrigemPing.ServidorDoJogo ? " ms" : " ms*");
         }
 
         string TextoFps()
@@ -240,6 +269,7 @@ namespace Overlay
         void RecarregarConfig()
         {
             config = Config.Carregar();
+            medidorPing.DefinirAlvoReserva(config.AlvoPing);
             Redesenhar(true);
         }
 

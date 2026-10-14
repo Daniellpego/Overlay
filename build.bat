@@ -6,7 +6,8 @@ if not exist "%CSC%" (
     echo Compilador C# nao encontrado em %CSC%
     exit /b 1
 )
-"%CSC%" /nologo /target:winexe /optimize+ /warnaserror+ /codepage:65001 ^
+rem /platform:x64: o MonitorRede usa offsets de estruturas ETW de 64 bits.
+"%CSC%" /nologo /target:winexe /platform:x64 /optimize+ /warnaserror+ /codepage:65001 ^
     /out:"%~dp0Overlay.exe" ^
     /r:System.Windows.Forms.dll /r:System.Drawing.dll ^
     "%~dp0src\*.cs"

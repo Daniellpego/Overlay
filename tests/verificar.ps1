@@ -39,11 +39,16 @@ $raiz = Split-Path $PSScriptRoot -Parent
 $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $pastaTemp = Join-Path $raiz '.tmp'
 New-Item -ItemType Directory -Force $pastaTemp | Out-Null
-$exeTeste = Join-Path $pastaTemp 'TesteCalculadoraFps.exe'
-& $csc /nologo /warnaserror+ /codepage:65001 "/out:$exeTeste" (Join-Path $raiz 'src\CalculadoraFps.cs') (Join-Path $PSScriptRoot 'TesteCalculadoraFps.cs') | Write-Host
-Checar 'compila testes de FPS' ($LASTEXITCODE -eq 0) ''
-& $exeTeste | Write-Host
-Checar 'testes de calculo de FPS' ($LASTEXITCODE -eq 0) ''
+function RodarTeste($nome, $fontes) {
+    $saida = Join-Path $pastaTemp "$nome.exe"
+    $arquivos = $fontes | ForEach-Object { Join-Path $raiz $_ }
+    & $csc /nologo /platform:x64 /warnaserror+ /codepage:65001 "/out:$saida" $arquivos | Write-Host
+    Checar "compila $nome" ($LASTEXITCODE -eq 0) ''
+    & $saida | Write-Host
+    Checar $nome ($LASTEXITCODE -eq 0) ''
+}
+RodarTeste 'TesteCalculadoraFps' @('src\CalculadoraFps.cs', 'tests\TesteCalculadoraFps.cs')
+RodarTeste 'TesteRede' @('src\DetectorServidor.cs', 'src\MedidorPing.cs', 'src\Log.cs', 'tests\TesteRede.cs')
 
 Get-Process Overlay -ErrorAction SilentlyContinue | Stop-Process -Force
 $focoAntes = [W]::GetForegroundWindow()

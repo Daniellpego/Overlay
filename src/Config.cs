@@ -18,6 +18,7 @@ namespace Overlay
         public int OpacidadeFundo = 140;
         public bool MostrarSegundos = false;
         public string AlvoPing = "1.1.1.1";
+        public bool DetectarServidorJogo = true;
 
         public static string Caminho
         {
@@ -63,6 +64,7 @@ namespace Overlay
                 case "opacidade_fundo": OpacidadeFundo = Inteiro(valor, OpacidadeFundo, 0, 255); break;
                 case "mostrar_segundos": MostrarSegundos = Booleano(valor, MostrarSegundos); break;
                 case "alvo_ping": if (valor.Length > 0) AlvoPing = valor; break;
+                case "detectar_servidor_jogo": DetectarServidorJogo = Booleano(valor, DetectarServidorJogo); break;
             }
         }
 
