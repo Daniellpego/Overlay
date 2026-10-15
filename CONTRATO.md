@@ -84,3 +84,7 @@ elevada e inicia com o Windows. Config dela em `%LOCALAPPDATA%\Overlay` (só lid
    - `tests/TesteDistribuicao.ps1`: pacote, manifesto, caminhos especiais, colisão, junção, recuperação e scripts.
      Gate completo `tests/verificar.ps1`: Tudo OK. Instalação/UAC/atalhos/remoção reais não executados nesta sessão.
    - A versão tem download pronto para uso, mas não representa homologação em todos os jogos nem estabilidade final.
+   - PR #5 integrado em d128e39; release `v0.1.0` publicada como prévia. Download público sem autenticação
+     conferido contra o SHA-256, manifesto íntegro (14 arquivos) e revisão limpa d128e39c022dd9577f54b5c057da156166ef8687.
+     O executável efetivamente baixado passou no gate completo: Tudo OK. Distribuição: 32 verificações aprovadas.
+     README público conferido no GitHub, com imagens carregadas e link direto do pacote.
