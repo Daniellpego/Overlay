@@ -12,11 +12,11 @@
 <p align="center">
   <img alt="Windows 11 x64" src="https://img.shields.io/badge/Windows_11-x64-c4f566?style=flat-square&amp;labelColor=0b1118">
   <img alt="Feito em C#" src="https://img.shields.io/badge/feito_em-C%23-c4f566?style=flat-square&amp;labelColor=0b1118">
-  <a href="https://github.com/Daniellpego/overlay/releases/tag/v0.1.0"><img alt="Versão 0.1.0: prévia pública" src="https://img.shields.io/badge/v0.1.0-pr%C3%A9via_p%C3%BAblica-c4f566?style=flat-square&amp;labelColor=0b1118"></a>
+  <a href="https://github.com/Daniellpego/overlay/releases/tag/v0.1.1"><img alt="Versão 0.1.1: prévia pública" src="https://img.shields.io/badge/v0.1.1-pr%C3%A9via_p%C3%BAblica-c4f566?style=flat-square&amp;labelColor=0b1118"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Daniellpego/overlay/releases/download/v0.1.0/Overlay-v0.1.0-win-x64.zip"><strong>↓ Baixar Overlay para Windows x64</strong></a><br>
+  <a href="https://github.com/Daniellpego/overlay/releases/download/v0.1.1/Overlay-v0.1.1-win-x64.zip"><strong>↓ Baixar Overlay para Windows x64</strong></a><br>
   <sub>Pacote pronto para instalar · PresentMon incluído · Sem Git ou compilação</sub>
 </p>
 
@@ -68,15 +68,15 @@ Os pequenos símbolos importam:
 
 **Você vai precisar de:** Windows 11 x64 e uma conta com permissão de administrador. O pacote usa o Windows PowerShell 5.1 e o .NET Framework 4.x do Windows; não exige Git, SDK ou compilação.
 
-1. **[Baixe o ZIP pronto para usar](https://github.com/Daniellpego/overlay/releases/download/v0.1.0/Overlay-v0.1.0-win-x64.zip)** e escolha **Extrair tudo** no Explorador de Arquivos.
+1. **[Baixe o ZIP pronto para usar](https://github.com/Daniellpego/overlay/releases/download/v0.1.1/Overlay-v0.1.1-win-x64.zip)** e escolha **Extrair tudo** no Explorador de Arquivos.
 2. Abra a pasta extraída e dê dois cliques em **`instalar.bat`**. Autorize a instalação quando o Windows pedir.
 3. Procure **Overlay** no menu Iniciar e abra. Comece com o jogo em **janela sem bordas**.
 
 O instalador coloca os arquivos em `%ProgramFiles%\Overlay`, cria os atalhos e registra a remoção em **Configurações → Aplicativos → Aplicativos instalados**. O atalho pede administrador para acessar as medições do Windows. <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F10</kbd> oculta ou mostra a faixa.
 
-O ZIP já contém o PresentMon original da Intel, suas licenças, um manifesto de integridade e o **[LEIA-ME.txt](LEIA-ME.txt)**. A [página da versão](https://github.com/Daniellpego/overlay/releases/tag/v0.1.0) também oferece o SHA-256 do download.
+O ZIP já contém o PresentMon original da Intel, suas licenças, um manifesto de integridade e o **[LEIA-ME.txt](LEIA-ME.txt)**. A [página da versão](https://github.com/Daniellpego/overlay/releases/tag/v0.1.1) também oferece o SHA-256 do download.
 
-> **Prévia pública 0.1.0:** instalação e atualização foram verificadas em pastas isoladas. A confirmação do UAC, os atalhos instalados e a remoção em uma instalação real ainda precisam de validação. O executável Overlay não possui assinatura digital; o Windows pode exibir “editor desconhecido”. Confira a origem e o hash do pacote antes de autorizar.
+> **Prévia pública 0.1.1:** instalação e atualização foram verificadas em pastas isoladas. A confirmação do UAC, os atalhos instalados e a remoção em uma instalação real ainda precisam de validação. O executável Overlay não possui assinatura digital; o Windows pode exibir “editor desconhecido”. Confira a origem e o hash do pacote antes de autorizar.
 
 <details>
 <summary><strong>Atualizar, iniciar com o Windows ou desinstalar</strong></summary>
@@ -94,7 +94,7 @@ O ZIP já contém o PresentMon original da Intel, suas licenças, um manifesto d
 <details>
 <summary><strong>Baixei “Code → Download ZIP”. É o mesmo pacote?</strong></summary>
 
-Esse botão baixa o código-fonte. Para instalar sem compilar, use **Baixar Overlay para Windows x64** acima ou o arquivo **Overlay-v0.1.0-win-x64.zip** em Releases. Os arquivos automáticos “Source code” são destinados ao desenvolvimento.
+Esse botão baixa o código-fonte. Para instalar sem compilar, use **Baixar Overlay para Windows x64** acima ou o arquivo **Overlay-v0.1.1-win-x64.zip** em Releases. Os arquivos automáticos “Source code” são destinados ao desenvolvimento.
 
 </details>
 

@@ -11,6 +11,6 @@ namespace Overlay
 {
     static class Versao
     {
-        public const string Atual = "0.1.0";
+        public const string Atual = "0.1.1";
     }
 }
