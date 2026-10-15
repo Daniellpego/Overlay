@@ -1,4 +1,4 @@
-﻿# Verificação automática do overlay: abre o Overlay.exe, confere a janela e fecha.
+# Verificação automática do overlay: abre o Overlay.exe, confere a janela e fecha.
 # Uso: powershell -ExecutionPolicy Bypass -File tests\verificar.ps1 [-Exe caminho\Overlay.exe]
 param([string]$Exe = (Join-Path (Split-Path $PSScriptRoot -Parent) 'Overlay.exe'))
 $ErrorActionPreference = 'Stop'
@@ -41,21 +41,29 @@ function Checar($nome, $ok, $detalhe) {
 
 # Testes de lógica pura (sem janela nem admin).
 $raiz = Split-Path $PSScriptRoot -Parent
+$exeTeste = (Resolve-Path $exe).Path
+$raizTeste = [IO.Path]::GetFullPath($raiz).TrimEnd('\') + '\'
+if (-not $exeTeste.StartsWith($raizTeste, [StringComparison]::OrdinalIgnoreCase) -or
+    $exeTeste.StartsWith($env:ProgramFiles.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Verificação recusada: nunca testar nem fechar o overlay instalado.'
+}
 $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $pastaTemp = Join-Path $raiz '.tmp'
 New-Item -ItemType Directory -Force $pastaTemp | Out-Null
 function RodarTeste($nome, $fontes) {
     $saida = Join-Path $pastaTemp "$nome.exe"
     $arquivos = $fontes | ForEach-Object { Join-Path $raiz $_ }
-    & $csc /nologo /platform:x64 /warnaserror+ /codepage:65001 "/out:$saida" $arquivos | Write-Host
+    & $csc /nologo /platform:x64 /warnaserror+ /codepage:65001 "/main:$nome" "/out:$saida" $arquivos | Write-Host
     Checar "compila $nome" ($LASTEXITCODE -eq 0) ''
+    if ($LASTEXITCODE -ne 0) { return }
     & $saida | Write-Host
     Checar $nome ($LASTEXITCODE -eq 0) ''
 }
 RodarTeste 'TesteCalculadoraFps' @('src\CalculadoraFps.cs', 'tests\TesteCalculadoraFps.cs')
+RodarTeste 'TesteRegressoes' @('src\*.cs', 'tests\TesteRegressoes.cs')
 RodarTeste 'TesteRede' @('src\DetectorServidor.cs', 'src\MedidorPing.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\TesteRede.cs')
 RodarTeste 'TesteSessaoEtw' @('src\MonitorRede.cs', 'src\SessaoEtw.cs', 'src\DetectorServidor.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\TesteSessaoEtw.cs')
-RodarTeste 'ProvaFpsTela' @('src\ContadorTela.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\ProvaFpsTela.cs')
+RodarTeste 'ProvaFpsTela' @('src\ContadorTela.cs', 'src\Native.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\ProvaFpsTela.cs')
 RodarTeste 'ProvaPing' @('src\MedidorPing.cs', 'src\DetectorServidor.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\ProvaPing.cs')
 RodarTeste 'TesteEtapa4' @('src\Atalho.cs', 'src\Faixas.cs', 'src\Config.cs', 'src\InicioAutomatico.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\TesteEtapa4.cs')
 
@@ -69,7 +77,7 @@ foreach ($outro in Get-CimInstance Win32_Process -Filter "Name='Overlay.exe'") {
     }
     # O mutex de instância única faria a cópia de teste sair na hora; sem fechar o do Daniel, os testes da janela ficam para depois.
     Write-Host '[PULADO] testes da janela: ha um overlay seu aberto (instalado). Feche pela bandeja > Sair e rode de novo.'
-    if ($falhas -gt 0) { Write-Host "$falhas falha(s)"; exit 1 } else { Write-Host 'Tudo OK (sem os testes da janela)'; exit 0 }
+    if ($falhas -gt 0) { Write-Host "$falhas falha(s)"; exit 1 } else { Write-Host 'INCONCLUSIVO: lógica aprovada; janela não verificada.'; exit 2 }
 }
 $focoAntes = [W]::GetForegroundWindow()
 $proc = Start-Process $exe -PassThru

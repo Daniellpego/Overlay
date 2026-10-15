@@ -45,7 +45,8 @@ static class TesteRede
         Enviar(d, 100, "52.1.2.3", 60, 0, 5000);    // servidor da partida
         Enviar(d, 100, "8.8.8.8", 1, 0, 5000);      // DNS
         Enviar(d, 100, "34.9.9.9", 10, 0, 5000);    // chat de voz
-        IPAddress s = d.Servidor(5000);
+        d.Servidor(5000); // inicia a observação do candidato; exige 2 s de liderança
+        IPAddress s = d.Servidor(7000);
         Checar("acha o IP com mais pacotes", s != null && s.ToString() == "52.1.2.3", "(obtido " + s + ")");
     }
 
@@ -58,7 +59,8 @@ static class TesteRede
         Enviar(d, 100, "239.255.255.250", 200, 0, 5000);
         Enviar(d, 100, "fe80::1", 200, 0, 5000);
         Enviar(d, 100, "2804:14c::1", 40, 0, 5000);
-        IPAddress s = d.Servidor(5000);
+        d.Servidor(5000);
+        IPAddress s = d.Servidor(7000);
         Checar("ignora LAN/multicast e aceita IPv6 publico", s != null && s.ToString() == "2804:14c::1", "(obtido " + s + ")");
     }
 
@@ -67,7 +69,8 @@ static class TesteRede
         var d = new DetectorServidor();
         d.DefinirAlvo(100);
         Enviar(d, 100, "52.1.2.3", 2, 0, 5000);
-        IPAddress s = d.Servidor(5000);
+        d.Servidor(5000);
+        IPAddress s = d.Servidor(7000);
         Checar("menu (pouco trafego) nao vira servidor", s == null, "(obtido " + s + ")");
     }
 
@@ -77,7 +80,8 @@ static class TesteRede
         d.DefinirAlvo(100);
         Enviar(d, 999, "142.250.1.1", 500, 0, 5000); // navegador baixando algo
         Enviar(d, 100, "52.1.2.3", 30, 0, 5000);
-        IPAddress s = d.Servidor(5000);
+        d.Servidor(5000);
+        IPAddress s = d.Servidor(7000);
         Checar("ignora trafego de outros processos", s != null && s.ToString() == "52.1.2.3", "(obtido " + s + ")");
     }
 

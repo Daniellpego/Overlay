@@ -30,6 +30,7 @@ namespace Overlay
                 if (pid == pidAlvo) return;
                 pidAlvo = pid;
                 framesPorSwapchain.Clear();
+                ultimoTempoFrame = 0;
                 ultimaChegadaMs = double.MinValue;
             }
         }
@@ -56,7 +57,8 @@ namespace Overlay
                 if (pid != pidAlvo || pid == 0) return;
 
                 double tempo;
-                if (!double.TryParse(campos[indiceTempo], NumberStyles.Float, CultureInfo.InvariantCulture, out tempo)) return;
+                if (!double.TryParse(campos[indiceTempo], NumberStyles.Float, CultureInfo.InvariantCulture, out tempo) ||
+                    double.IsNaN(tempo) || double.IsInfinity(tempo) || tempo < 0) return;
 
                 Queue<double> fila;
                 string swapchain = campos[indiceSwapchain];
@@ -82,19 +84,25 @@ namespace Overlay
 
                 // Um processo pode ter várias swapchains (launcher, overlay de terceiros); vale a que mais apresentou frames.
                 double melhor = -1;
+                int maiorAmostra = 0;
                 foreach (Queue<double> fila in framesPorSwapchain.Values)
                 {
-                    if (fila.Count < 2) continue;
+                    if (fila.Count < 3) continue;
                     double primeiro = fila.Peek();
                     double ultimo = primeiro;
                     foreach (double t in fila) ultimo = t;
 
                     // Swapchain que parou de apresentar (fechou) não pode congelar o valor antigo.
                     if (ultimo < ultimoTempoFrame - JanelaMs) continue;
-                    if (ultimo <= primeiro) continue;
+                    // Uma rajada curta de uma superfície auxiliar não representa o ritmo do jogo.
+                    if (ultimo - primeiro < 250) continue;
 
                     double fps = (fila.Count - 1) * 1000.0 / (ultimo - primeiro);
-                    if (fps > melhor) melhor = fps;
+                    if (fila.Count > maiorAmostra)
+                    {
+                        maiorAmostra = fila.Count;
+                        melhor = fps;
+                    }
                 }
                 if (melhor < 0) return null;
                 return (int)Math.Round(melhor);

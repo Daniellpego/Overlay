@@ -37,6 +37,13 @@ namespace Overlay
         readonly ManualResetEvent parar = new ManualResetEvent(false);
 
         public EstadoFps Estado { get; private set; }
+        volatile string diagnostico = "Aguardando dados do PresentMon";
+        public string Diagnostico { get { return diagnostico; } }
+
+        public bool PrecisaAlternativa
+        {
+            get { return Estado != EstadoFps.SemAdmin && (Estado != EstadoFps.Ok || Bloqueado || (relogio.Elapsed.TotalSeconds >= 5 && !Fps().HasValue)); }
+        }
 
         // true quando o Windows recusou a sessão ETW do PresentMon (mesmo como admin). Volta a false quando os dados voltam.
         volatile bool bloqueado;
@@ -57,12 +64,14 @@ namespace Overlay
             if (!EhAdministrador())
             {
                 Estado = EstadoFps.SemAdmin;
+                diagnostico = "PresentMon sem administrador";
                 return;
             }
             string exe = Path.Combine(Pastas.Programa, "tools\\PresentMon\\" + ArquivoPresentMon);
             if (!File.Exists(exe))
             {
                 Estado = EstadoFps.SemPresentMon;
+                diagnostico = "PresentMon ausente";
                 Log.Mensagem("PresentMon nao encontrado em " + exe + ". Rode tools\\baixar-presentmon.ps1.");
                 return;
             }
@@ -81,7 +90,11 @@ namespace Overlay
 
         public int? Fps()
         {
-            return calculadora.Fps(relogio.Elapsed.TotalMilliseconds);
+            int? valor = calculadora.Fps(relogio.Elapsed.TotalMilliseconds);
+            if (valor.HasValue) { Bloqueado = false; diagnostico = "PresentMon com dados recentes"; }
+            else if (Estado == EstadoFps.Ok && !Bloqueado && relogio.Elapsed.TotalSeconds >= 5)
+                diagnostico = "PresentMon sem dados recentes da janela ativa";
+            return valor;
         }
 
         // Abre o exe negando escrita e exclusão a outros processos e confere o SHA-256. O chamador mantém o arquivo
@@ -118,11 +131,13 @@ namespace Overlay
                     {
                         // Exe adulterado ou ilegível: tentar de novo não resolve e encheria o log.
                         Estado = EstadoFps.SemPresentMon;
+                        diagnostico = "PresentMon recusado: arquivo ausente, ilegível ou hash inválido";
                         return;
                     }
                 }
                 catch (Exception ex)
                 {
+                    diagnostico = "PresentMon falhou: " + ex.Message;
                     Log.Erro(ex);
                 }
                 if (encerrando) break;
@@ -178,7 +193,6 @@ namespace Overlay
                 bool cabecalhoConferido = false;
                 while ((linha = p.StandardOutput.ReadLine()) != null)
                 {
-                    Bloqueado = false;
                     calculadora.ProcessarLinha(linha, relogio.Elapsed.TotalMilliseconds);
                     if (!cabecalhoConferido && calculadora.ErroCabecalho != null)
                     {
@@ -196,7 +210,9 @@ namespace Overlay
                         string erros = string.Join(" | ", ultimosErros.ToArray());
                         // "access denied" mesmo como admin = o Windows está recusando sessões ETW (com o FC 27 aberto,
                         // o anticheat da EA faz isso; ver CONTRATO.md). O overlay mostra BLQ e segue tentando.
-                        Bloqueado = erros.IndexOf("access denied", StringComparison.OrdinalIgnoreCase) >= 0;
+                        Bloqueado = p.ExitCode == 5 || erros.IndexOf("access denied", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            erros.IndexOf("acesso negado", StringComparison.OrdinalIgnoreCase) >= 0;
+                        diagnostico = Bloqueado ? "PresentMon bloqueado pelo Windows" : "PresentMon saiu com código " + p.ExitCode;
                         Log.Mensagem("PresentMon saiu com codigo " + p.ExitCode + ": " + erros);
                         ultimosErros.Clear();
                     }

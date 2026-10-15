@@ -49,7 +49,7 @@ namespace Overlay
                 }
                 if (!primeiraInstancia) return 0;
 
-                Native.SetProcessDPIAware();
+                Native.ConfigurarDpi();
                 Application.EnableVisualStyles();
                 Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
                 Application.ThreadException += (s, e) => Log.Erro(e.Exception);

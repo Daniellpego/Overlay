@@ -36,6 +36,9 @@ namespace Overlay
         DateTime desistiuDoServidorEm;
         OrigemPing origemAtual = OrigemPing.Nenhuma;
         int? valorAtual;
+        IPAddress destinoAtual;
+
+        public IPAddress DestinoAtual { get { lock (trava) return destinoAtual; } }
 
         public MedidorPing(string alvoReserva, Func<IPAddress> servidorDetectado)
         {
@@ -102,16 +105,20 @@ namespace Overlay
                 if (rtt.HasValue)
                 {
                     falhasServidor = 0;
-                    Registrar(OrigemPing.ServidorDoJogo, rtt);
+                    Registrar(OrigemPing.ServidorDoJogo, servidor, rtt);
                     return;
                 }
                 if (++falhasServidor == FalhasAteDesistirDoServidor) desistiuDoServidorEm = DateTime.UtcNow;
                 // Ainda dentro da tolerância: mantém o último valor do servidor em vez de piscar para a reserva.
-                if (falhasServidor < FalhasAteDesistirDoServidor && origemAtual == OrigemPing.ServidorDoJogo) return;
+                if (falhasServidor < FalhasAteDesistirDoServidor && origemAtual == OrigemPing.ServidorDoJogo)
+                {
+                    Registrar(OrigemPing.ServidorDoJogo, servidor, null);
+                    return;
+                }
             }
 
             IPAddress reserva = ResolverReserva();
-            Registrar(reserva == null ? OrigemPing.Nenhuma : OrigemPing.Reserva, reserva == null ? null : Pingar(ping, reserva));
+            Registrar(reserva == null ? OrigemPing.Nenhuma : OrigemPing.Reserva, reserva, reserva == null ? null : Pingar(ping, reserva));
         }
 
         static long? Pingar(Ping ping, IPAddress ip)
@@ -126,14 +133,15 @@ namespace Overlay
             return null;
         }
 
-        void Registrar(OrigemPing origem, long? rtt)
+        internal void Registrar(OrigemPing origem, IPAddress destino, long? rtt)
         {
             lock (trava)
             {
-                if (origem != origemAtual)
+                if (origem != origemAtual || !object.Equals(destino, destinoAtual))
                 {
                     amostras.Clear();
                     origemAtual = origem;
+                    destinoAtual = destino;
                 }
                 if (!rtt.HasValue)
                 {

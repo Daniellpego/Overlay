@@ -31,6 +31,21 @@ namespace Overlay
         struct BLENDFUNCTION { public byte BlendOp, BlendFlags, SourceConstantAlpha, AlphaFormat; }
 
         [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+        [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr contexto);
+        [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr janela);
+
+        public static void ConfigurarDpi()
+        {
+            try { if (SetProcessDpiAwarenessContext(new IntPtr(-4))) return; } // PER_MONITOR_AWARE_V2
+            catch (EntryPointNotFoundException) { }
+            SetProcessDPIAware();
+        }
+
+        public static uint DpiDaJanela(IntPtr janela)
+        {
+            try { uint dpi = GetDpiForWindow(janela); return dpi == 0 ? 96 : dpi; }
+            catch (EntryPointNotFoundException) { return 96; }
+        }
         [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr hWnd);
         [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
         [DllImport("user32.dll", SetLastError = true)]

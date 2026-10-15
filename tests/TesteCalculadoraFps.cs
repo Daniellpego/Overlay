@@ -20,9 +20,21 @@ static class TesteCalculadoraFps
         LinhasQuebradasNaoDerrubam();
         CabecalhoSemColunasEsperadas();
         ReinicioDoPresentMonZeraTempo();
+        RajadaAuxiliarNaoViraFpsDoJogo();
 
         Console.WriteLine(falhas == 0 ? "Calculo de FPS: tudo OK" : "Calculo de FPS: " + falhas + " falha(s)");
         return falhas == 0 ? 0 : 1;
+    }
+
+    static void RajadaAuxiliarNaoViraFpsDoJogo()
+    {
+        var c = new CalculadoraFps();
+        c.ProcessarLinha(Cabecalho, 0);
+        c.DefinirAlvo(1234);
+        Alimentar(c, "Jogo.exe", 1234, "principal", 60, 0, 2000);
+        c.ProcessarLinha(Linha("Jogo.exe", 1234, "auxiliar", 1998), 2000);
+        c.ProcessarLinha(Linha("Jogo.exe", 1234, "auxiliar", 1999), 2000);
+        Checar("rajada auxiliar nao substitui 60 FPS por 1000", c.Fps(2000) == 60, "(obtido " + c.Fps(2000) + ")");
     }
 
     static string Linha(string app, int pid, string swapchain, double tempoMs)
