@@ -101,3 +101,6 @@ elevada e inicia com o Windows. Config dela em `%LOCALAPPDATA%\Overlay` (só lid
      Inicialização da configuração do usuário também conferida com `C:\WINDOWS\TEMP` sem alterar preferências existentes.
    - DLL carregada por bytes para não manter bloqueio de arquivo; regressão remove a mesma instalação
      isolada da qual o auxiliar foi carregado, em processo novo do PowerShell 5.1.
+   - Build sem avisos e gate completo: Tudo OK; 35 regressões de distribuição e revisão independente aprovadas.
+     PR #7 integrado em ea31ca2 e prévia `v0.1.1` publicada. ZIP baixado sem autenticação, SHA-256/manifesto
+     conferidos (15 arquivos), auxiliares executados em PS5 novo com TEMP inválido. Nova instalação com UAC pendente.
