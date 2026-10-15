@@ -15,7 +15,14 @@ namespace Overlay
     // que apresenta frames, para saber quando o processo termina. Exceção aceita pelo Daniel (CONTRATO.md).
     class LeitorFps : IDisposable
     {
-        public const string NomeSessao = "OverlayFps";
+        public const string NomeSessaoPadrao = "OverlayFps";
+        // Nome próprio por instância: a prova no jogo (tests\ProvaJogo.cs) roda junto com o overlay instalado sem derrubar a sessão dele.
+        readonly string NomeSessao;
+
+        public LeitorFps(string nomeSessao = NomeSessaoPadrao)
+        {
+            NomeSessao = nomeSessao;
+        }
         // Mesmo arquivo e hash de tools\baixar-presentmon.ps1. Conferido antes de cada execução porque ele roda como admin.
         public const string ArquivoPresentMon = "PresentMon-2.6.0-x64.exe";
         public const string Sha256PresentMon = "B2A706BC6AD475749E3B7E3409263AA1E6906D45BDCF993F6DBC0F660188F1AF";

@@ -11,4 +11,10 @@ rem /platform:x64: o MonitorRede usa offsets de estruturas ETW de 64 bits.
     /out:"%~dp0Overlay.exe" ^
     /r:System.Windows.Forms.dll /r:System.Drawing.dll ^
     "%~dp0src\*.cs"
+if errorlevel 1 exit /b 1
+rem Prova de um clique dentro do jogo (provar-no-jogo.bat): mesmo codigo do overlay + tests\ProvaJogo.cs.
+"%CSC%" /nologo /target:exe /platform:x64 /optimize+ /warnaserror+ /codepage:65001 /main:ProvaJogo ^
+    /out:"%~dp0ProvaJogo.exe" ^
+    /r:System.Windows.Forms.dll /r:System.Drawing.dll ^
+    "%~dp0src\*.cs" "%~dp0tests\ProvaJogo.cs"
 exit /b %ERRORLEVEL%

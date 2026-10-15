@@ -24,7 +24,19 @@ public static class JanelaOverlay {
 Add-Type -AssemblyName System.Drawing
 [void][JanelaOverlay]::SetProcessDPIAware()
 
-'hora;pid;vivo;cpu_pct;ram_privada_mb;handles;threads;fc_aberto' | Set-Content $csv -Encoding UTF8
+# Grava compartilhando o arquivo (FileShare.ReadWrite) e tenta de novo se outro programa estiver lendo na hora.
+function Anotar($linha) {
+    for ($tentativa = 0; $tentativa -lt 5; $tentativa++) {
+        try {
+            $f = [IO.File]::Open($csv, [IO.FileMode]::Append, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite)
+            $bytes = [Text.Encoding]::UTF8.GetBytes($linha + "`r`n")
+            $f.Write($bytes, 0, $bytes.Length); $f.Close(); return
+        } catch { Start-Sleep -Milliseconds 200 }
+    }
+}
+
+Remove-Item $csv -ErrorAction SilentlyContinue
+Anotar 'hora;pid;vivo;cpu_pct;ram_privada_mb;handles;threads;fc_aberto'
 $nucleos = [Environment]::ProcessorCount
 $fim = (Get-Date).AddMinutes($Minutos)
 $amostra = 0
@@ -35,7 +47,7 @@ while ((Get-Date) -lt $fim) {
         $perf = Get-CimInstance Win32_PerfFormattedData_PerfProc_Process -Filter "IDProcess=$($p.ProcessId)"
         $cpu = [math]::Round($perf.PercentProcessorTime / $nucleos, 2)
         $ram = [math]::Round($perf.WorkingSetPrivate / 1MB, 1)
-        "{0};{1};sim;{2};{3};{4};{5};{6}" -f (Get-Date -Format 'HH:mm:ss'), $p.ProcessId, $cpu, $ram, $perf.HandleCount, $perf.ThreadCount, $fc | Add-Content $csv
+        Anotar ("{0};{1};sim;{2};{3};{4};{5};{6}" -f (Get-Date -Format 'HH:mm:ss'), $p.ProcessId, $cpu, $ram, $perf.HandleCount, $perf.ThreadCount, $fc)
         if ($amostra % 10 -eq 0) {
             $r = [JanelaOverlay]::Achar([uint32]$p.ProcessId)
             if ($r.Ri -gt $r.L) {
@@ -47,9 +59,9 @@ while ((Get-Date) -lt $fim) {
             }
         }
     } else {
-        "{0};;NAO;;;;;{1}" -f (Get-Date -Format 'HH:mm:ss'), $fc | Add-Content $csv
+        Anotar ("{0};;NAO;;;;;{1}" -f (Get-Date -Format 'HH:mm:ss'), $fc)
     }
     $amostra++
     Start-Sleep -Seconds 30
 }
-'fim' | Add-Content $csv
+Anotar 'fim'

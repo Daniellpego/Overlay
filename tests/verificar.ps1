@@ -55,7 +55,8 @@ function RodarTeste($nome, $fontes) {
 RodarTeste 'TesteCalculadoraFps' @('src\CalculadoraFps.cs', 'tests\TesteCalculadoraFps.cs')
 RodarTeste 'TesteRede' @('src\DetectorServidor.cs', 'src\MedidorPing.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\TesteRede.cs')
 RodarTeste 'TesteSessaoEtw' @('src\MonitorRede.cs', 'src\SessaoEtw.cs', 'src\DetectorServidor.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\TesteSessaoEtw.cs')
-RodarTeste 'TesteTaxaConhecida' @('src\ContadorTela.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\TesteTaxaConhecida.cs')
+RodarTeste 'ProvaFpsTela' @('src\ContadorTela.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\ProvaFpsTela.cs')
+RodarTeste 'ProvaPing' @('src\MedidorPing.cs', 'src\DetectorServidor.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\ProvaPing.cs')
 RodarTeste 'TesteEtapa4' @('src\Atalho.cs', 'src\Faixas.cs', 'src\Config.cs', 'src\InicioAutomatico.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\TesteEtapa4.cs')
 
 # Só fecha cópias de teste desta pasta. NUNCA fecha o overlay do Daniel (instalado ou de caminho desconhecido):

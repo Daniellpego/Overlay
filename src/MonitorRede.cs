@@ -11,7 +11,9 @@ namespace Overlay
     // Qualquer falha aqui só pausa a detecção (com nova tentativa): o ping continua no alvo de reserva.
     class MonitorRede : IDisposable
     {
-        public const string NomeSessao = "OverlayRede";
+        public const string NomeSessaoPadrao = "OverlayRede";
+        // Nome próprio por instância (ver LeitorFps): a prova no jogo usa outro nome e não derruba a sessão do overlay.
+        readonly string NomeSessao;
         static readonly Guid ProvedorKernelNetwork = new Guid("7dd42a49-5329-4832-8dfd-43d979153a88");
         const ulong KeywordIpv4 = 0x10;
         const ulong KeywordIpv6 = 0x20;
@@ -56,8 +58,9 @@ namespace Overlay
         ulong sessao;
         volatile bool encerrando;
 
-        public MonitorRede(DetectorServidor detector, Stopwatch relogio)
+        public MonitorRede(DetectorServidor detector, Stopwatch relogio, string nomeSessao = NomeSessaoPadrao)
         {
+            NomeSessao = nomeSessao;
             this.detector = detector;
             this.relogio = relogio;
             callback = AoReceberEvento;

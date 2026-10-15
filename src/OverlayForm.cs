@@ -204,6 +204,7 @@ namespace Overlay
             if (contadorTela == null)
             {
                 contadorTela = new ContadorTela();
+                contadorTela.DefinirAreaIgnorada(Bounds);
                 contadorTela.Iniciar();
             }
             return contadorTela.Fps();
@@ -296,8 +297,8 @@ namespace Overlay
                     // Mantém o WinForms com os mesmos limites; senão um Show()/Hide() posterior volta a janela ao tamanho padrão.
                     if (Bounds != limites) Bounds = limites;
                     Native.DesenharJanela(Handle, bmp, limites.Location);
-                    // Cada redesenho muda a tela: o contador desconta para não somar o próprio overlay ao FPS do jogo.
-                    if (contadorTela != null) contadorTela.RegistrarAtualizacaoPropria(Handle);
+                    // Mudanças só na área do overlay não contam como quadro do jogo.
+                    if (contadorTela != null) contadorTela.DefinirAreaIgnorada(limites);
                 }
             }
         }

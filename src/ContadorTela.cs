@@ -1,15 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Threading;
 
 namespace Overlay
 {
-    // Plano B do FPS: conta quantas vezes a imagem do monitor muda por segundo, pela API Desktop Duplication do Windows
+    // Plano B do FPS: conta quantas vezes a imagem do JOGO muda por segundo, pela API Desktop Duplication do Windows
     // (a mesma do OBS e do compartilhamento de tela do Discord). Não toca no processo do jogo, não usa ETW e não precisa
     // de admin; serve quando o anticheat (ex.: EA Javelin no FC 27) faz o Windows recusar as sessões ETW do PresentMon.
-    // Limites: mede o que chega ao monitor (teto = taxa de atualização da tela) e conta qualquer mudança na tela inteira,
-    // então só é confiável com o jogo em tela cheia nesse monitor.
+    // A cada atualização da tela o Windows diz QUAIS retângulos mudaram; só conta se a mudança cai dentro da janela do jogo
+    // e fora da área ignorada (o próprio overlay). Assim outras janelas e os redesenhos do overlay não somam no FPS.
+    // Limite: mede o que chega ao monitor (teto = taxa de atualização da tela).
     // Chamadas COM feitas pela vtable (índices do SDK do Windows; offsets x64, build /platform:x64).
     class ContadorTela : IDisposable
     {
@@ -19,6 +21,8 @@ namespace Overlay
         const uint D3D11_SDK_VERSION = 7;
         const double JanelaMs = 1000;
         const double ValidadeMs = 1500;
+        const int TamanhoRetanguloMovido = 24; // DXGI_OUTDUPL_MOVE_RECT: POINT origem + RECT destino
+        const int TamanhoRetangulo = 16;        // RECT
 
         // Índices na vtable (IUnknown 0–2, IDXGIObject 3–6).
         const int VtQueryInterface = 0;
@@ -28,6 +32,8 @@ namespace Overlay
         const int VtOutputGetDesc = 7;
         const int VtOutput1DuplicateOutput = 22;
         const int VtDuplicationAcquireNextFrame = 8;
+        const int VtDuplicationGetFrameDirtyRects = 9;
+        const int VtDuplicationGetFrameMoveRects = 10;
         const int VtDuplicationReleaseFrame = 14;
 
         static readonly Guid IidDxgiDevice = new Guid("54ec77fa-1377-44e6-8c32-88fd5f44c84c");
@@ -40,6 +46,10 @@ namespace Overlay
         [DllImport("kernel32.dll")] static extern bool QueryPerformanceFrequency(out long frequencia);
         [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr janela, uint flags);
         [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr janela, out RECT r);
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct RECT { public int Left, Top, Right, Bottom; }
 
         [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int FnQueryInterface(IntPtr obj, ref Guid iid, out IntPtr saida);
         [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate uint FnRelease(IntPtr obj);
@@ -48,21 +58,23 @@ namespace Overlay
         [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int FnGetDesc(IntPtr obj, IntPtr desc);
         [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int FnDuplicateOutput(IntPtr obj, IntPtr dispositivo, out IntPtr duplicacao);
         [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int FnAcquireNextFrame(IntPtr obj, uint timeoutMs, IntPtr info, out IntPtr recurso);
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int FnGetFrameRects(IntPtr obj, uint tamanho, IntPtr buffer, out uint necessario);
         [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int FnReleaseFrame(IntPtr obj);
 
         readonly object trava = new object();
         readonly Queue<KeyValuePair<long, int>> quadros = new Queue<KeyValuePair<long, int>>();
         readonly ManualResetEvent parar = new ManualResetEvent(false);
         readonly long frequenciaQpc;
+        readonly Func<IntPtr> janelaAlvo;
         Thread thread;
         volatile bool encerrando;
         long ultimoQuadroQpc;
+        // Área a ignorar em coordenadas de tela (o próprio overlay). Lida pela thread do contador; trocada inteira.
+        Rectangle areaIgnorada;
 
         public string UltimoErro { get; private set; }
 
-        readonly Func<IntPtr> janelaAlvo;
-
-        // janelaAlvo: janela cujo monitor será medido (padrão: a janela em primeiro plano, que no jogo é o próprio jogo).
+        // janelaAlvo: janela do jogo (padrão: a janela em primeiro plano, que no jogo é o próprio jogo).
         public ContadorTela(Func<IntPtr> janelaAlvo = null)
         {
             QueryPerformanceFrequency(out frequenciaQpc);
@@ -75,9 +87,13 @@ namespace Overlay
             thread.Start();
         }
 
-        // Quadros por segundo no monitor do jogo, ou null sem dados recentes.
-        // Desconta as atualizações do próprio overlay (ver RegistrarAtualizacaoPropria): sem isso o FPS sairia ~+2 com o jogo
-        // parado ou abaixo da taxa do monitor (prova em tests\ProvaFpsTela.cs).
+        // O overlay informa onde está a cada redesenho: mudanças só nessa área não contam como quadro do jogo.
+        public void DefinirAreaIgnorada(Rectangle area)
+        {
+            lock (trava) areaIgnorada = area;
+        }
+
+        // Quadros por segundo do jogo, ou null sem dados recentes.
         public int? Fps()
         {
             long agora = Qpc();
@@ -87,21 +103,9 @@ namespace Overlay
                 Podar(agora);
                 int total = 0;
                 foreach (KeyValuePair<long, int> q in quadros) total += q.Value;
-                while (proprias.Count > 0 && MsEntre(proprias.Peek(), agora) > JanelaMs) proprias.Dequeue();
-                return Math.Max(0, total - proprias.Count);
+                return total;
             }
         }
-
-        readonly Queue<long> proprias = new Queue<long>();
-
-        // O overlay chama a cada redesenho; só conta se ele estiver no monitor medido.
-        public void RegistrarAtualizacaoPropria(IntPtr janelaOverlay)
-        {
-            if (MonitorFromWindow(janelaOverlay, 2) != monitorMedido) return;
-            lock (trava) proprias.Enqueue(Qpc());
-        }
-
-        volatile IntPtr monitorMedido;
 
         void Loop()
         {
@@ -123,14 +127,16 @@ namespace Overlay
             }
         }
 
-        // Cria a duplicação do monitor onde está a janela da frente e conta quadros até perder o acesso
-        // (troca de resolução, tela de UAC, jogo em tela cheia exclusiva) ou o monitor do jogo mudar.
+        // Cria a duplicação do monitor onde está a janela do jogo e conta quadros até perder o acesso
+        // (troca de resolução, tela de UAC, tela cheia exclusiva) ou o jogo ir para outro monitor.
         void Duplicar()
         {
             IntPtr dispositivo = IntPtr.Zero, contexto = IntPtr.Zero, dxgiDevice = IntPtr.Zero, adaptador = IntPtr.Zero;
             IntPtr saida = IntPtr.Zero, saida1 = IntPtr.Zero, duplicacao = IntPtr.Zero;
             IntPtr info = Marshal.AllocHGlobal(48);   // DXGI_OUTDUPL_FRAME_INFO
             IntPtr desc = Marshal.AllocHGlobal(96);   // DXGI_OUTPUT_DESC
+            int tamanhoMetadados = 4096;
+            IntPtr metadados = Marshal.AllocHGlobal(tamanhoMetadados);
             try
             {
                 int nivel;
@@ -142,6 +148,7 @@ namespace Overlay
 
                 IntPtr monitorAlvo = MonitorFromWindow(janelaAlvo(), 2 /* MONITOR_DEFAULTTONEAREST */);
                 IntPtr monitorDuplicado = IntPtr.Zero;
+                Point origemMonitor = Point.Empty;
                 for (uint i = 0; ; i++)
                 {
                     IntPtr candidata;
@@ -154,6 +161,8 @@ namespace Overlay
                         Liberar(ref saida);
                         saida = candidata;
                         monitorDuplicado = monitor;
+                        // DXGI_OUTPUT_DESC.DesktopCoordinates: os retângulos que mudaram vêm relativos a esse canto.
+                        origemMonitor = new Point(Marshal.ReadInt32(desc, 64), Marshal.ReadInt32(desc, 68));
                         if (monitor == monitorAlvo) break;
                     }
                     else Liberar(ref candidata);
@@ -164,10 +173,14 @@ namespace Overlay
                 Checar(Metodo<FnQueryInterface>(saida, VtQueryInterface)(saida, ref iid, out saida1), "IDXGIOutput1");
                 Checar(Metodo<FnDuplicateOutput>(saida1, VtOutput1DuplicateOutput)(saida1, dispositivo, out duplicacao), "DuplicateOutput");
                 UltimoErro = null;
-                monitorMedido = monitorDuplicado;
 
                 FnAcquireNextFrame adquirir = Metodo<FnAcquireNextFrame>(duplicacao, VtDuplicationAcquireNextFrame);
+                FnGetFrameRects movidos = Metodo<FnGetFrameRects>(duplicacao, VtDuplicationGetFrameMoveRects);
+                FnGetFrameRects sujos = Metodo<FnGetFrameRects>(duplicacao, VtDuplicationGetFrameDirtyRects);
                 FnReleaseFrame soltar = Metodo<FnReleaseFrame>(duplicacao, VtDuplicationReleaseFrame);
+
+                Rectangle areaJogo = AreaDoJogo(origemMonitor);
+                long proximaChecagem = Qpc() + frequenciaQpc / 4;
                 long proximaChecagemMonitor = Qpc() + frequenciaQpc;
                 while (!encerrando)
                 {
@@ -180,16 +193,38 @@ namespace Overlay
                         Checar(hr, "AcquireNextFrame");
                         long ultimoPresent = Marshal.ReadInt64(info, 0);
                         int acumulados = Marshal.ReadInt32(info, 16);
+                        int tamanhoNecessario = Marshal.ReadInt32(info, 40);
                         // LastPresentTime = 0 é só o ponteiro do mouse se mexendo: não é quadro novo.
-                        if (ultimoPresent != 0 && acumulados > 0) Registrar(ultimoPresent, acumulados);
+                        if (ultimoPresent != 0 && acumulados > 0)
+                        {
+                            if (tamanhoNecessario > tamanhoMetadados)
+                            {
+                                Marshal.FreeHGlobal(metadados);
+                                tamanhoMetadados = tamanhoNecessario;
+                                metadados = Marshal.AllocHGlobal(tamanhoMetadados);
+                            }
+                            Rectangle ignorar;
+                            lock (trava) ignorar = areaIgnorada;
+                            ignorar.Offset(-origemMonitor.X, -origemMonitor.Y);
+                            ignorar.Inflate(2, 2);
+                            if (tamanhoNecessario == 0 ||
+                                MudouNoJogo(duplicacao, movidos, sujos, metadados, tamanhoMetadados, areaJogo, ignorar))
+                                Registrar(ultimoPresent, acumulados);
+                        }
                         if (recurso != IntPtr.Zero) Liberar(ref recurso);
                         soltar(duplicacao);
                     }
 
-                    // Jogo foi para outro monitor: recria a duplicação no monitor certo.
                     long agora = Qpc();
+                    if (agora >= proximaChecagem)
+                    {
+                        // A janela do jogo pode mudar de tamanho/posição (ou o jogo da frente pode mudar).
+                        proximaChecagem = agora + frequenciaQpc / 4;
+                        areaJogo = AreaDoJogo(origemMonitor);
+                    }
                     if (agora >= proximaChecagemMonitor)
                     {
+                        // Jogo foi para outro monitor: recria a duplicação no monitor certo.
                         proximaChecagemMonitor = agora + frequenciaQpc;
                         if (MonitorFromWindow(janelaAlvo(), 2) != monitorDuplicado) return;
                     }
@@ -204,9 +239,46 @@ namespace Overlay
                 Liberar(ref dxgiDevice);
                 Liberar(ref contexto);
                 Liberar(ref dispositivo);
+                Marshal.FreeHGlobal(metadados);
                 Marshal.FreeHGlobal(desc);
                 Marshal.FreeHGlobal(info);
             }
+        }
+
+        // Janela do jogo em coordenadas do monitor duplicado. Vazia = vale o monitor inteiro.
+        Rectangle AreaDoJogo(Point origemMonitor)
+        {
+            RECT r;
+            if (!GetWindowRect(janelaAlvo(), out r) || r.Right <= r.Left || r.Bottom <= r.Top) return Rectangle.Empty;
+            return Rectangle.FromLTRB(r.Left - origemMonitor.X, r.Top - origemMonitor.Y, r.Right - origemMonitor.X, r.Bottom - origemMonitor.Y);
+        }
+
+        // Algum retângulo movido ou "sujo" (redesenhado) caiu dentro do jogo e fora da área ignorada?
+        static bool MudouNoJogo(IntPtr duplicacao, FnGetFrameRects movidos, FnGetFrameRects sujos, IntPtr buffer, int tamanho,
+            Rectangle areaJogo, Rectangle ignorar)
+        {
+            uint usados;
+            if (movidos(duplicacao, (uint)tamanho, buffer, out usados) >= 0)
+                for (int i = 0; i + TamanhoRetanguloMovido <= usados; i += TamanhoRetanguloMovido)
+                    if (Relevante(LerRetangulo(buffer, i + 8), areaJogo, ignorar)) return true;
+            if (sujos(duplicacao, (uint)tamanho, buffer, out usados) >= 0)
+                for (int i = 0; i + TamanhoRetangulo <= usados; i += TamanhoRetangulo)
+                    if (Relevante(LerRetangulo(buffer, i), areaJogo, ignorar)) return true;
+            return false;
+        }
+
+        // Público para teste (tests\TesteContadorTela.cs): a regra de "isso é quadro do jogo?".
+        public static bool Relevante(Rectangle mudanca, Rectangle areaJogo, Rectangle ignorar)
+        {
+            Rectangle dentro = areaJogo.IsEmpty ? mudanca : Rectangle.Intersect(mudanca, areaJogo);
+            if (dentro.Width <= 0 || dentro.Height <= 0) return false;
+            return ignorar.IsEmpty || !ignorar.Contains(dentro);
+        }
+
+        static Rectangle LerRetangulo(IntPtr buffer, int deslocamento)
+        {
+            return Rectangle.FromLTRB(Marshal.ReadInt32(buffer, deslocamento), Marshal.ReadInt32(buffer, deslocamento + 4),
+                Marshal.ReadInt32(buffer, deslocamento + 8), Marshal.ReadInt32(buffer, deslocamento + 12));
         }
 
         void Registrar(long qpc, int acumulados)
