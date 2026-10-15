@@ -12,7 +12,12 @@
 <p align="center">
   <img alt="Windows 11 x64" src="https://img.shields.io/badge/Windows_11-x64-c4f566?style=flat-square&amp;labelColor=0b1118">
   <img alt="Feito em C#" src="https://img.shields.io/badge/feito_em-C%23-c4f566?style=flat-square&amp;labelColor=0b1118">
-  <img alt="Status: em desenvolvimento" src="https://img.shields.io/badge/status-em_desenvolvimento-c4f566?style=flat-square&amp;labelColor=0b1118">
+  <a href="https://github.com/Daniellpego/overlay/releases/tag/v0.1.0"><img alt="Versão 0.1.0: prévia pública" src="https://img.shields.io/badge/v0.1.0-pr%C3%A9via_p%C3%BAblica-c4f566?style=flat-square&amp;labelColor=0b1118"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Daniellpego/overlay/releases/download/v0.1.0/Overlay-v0.1.0-win-x64.zip"><strong>↓ Baixar Overlay para Windows x64</strong></a><br>
+  <sub>Pacote pronto para instalar · PresentMon incluído · Sem Git ou compilação</sub>
 </p>
 
 <p align="center">
@@ -61,38 +66,35 @@ Os pequenos símbolos importam:
 
 ## Começar
 
-**Você vai precisar de:** Windows 11 x64, Git, Windows PowerShell e .NET Framework 4.x com o compilador `csc.exe`. A compilação usa o compilador do Framework; não exige instalar o SDK do .NET.
+**Você vai precisar de:** Windows 11 x64 e uma conta com permissão de administrador. O pacote usa o Windows PowerShell 5.1 e o .NET Framework 4.x do Windows; não exige Git, SDK ou compilação.
 
-### 1. Baixe o código
+1. **[Baixe o ZIP pronto para usar](https://github.com/Daniellpego/overlay/releases/download/v0.1.0/Overlay-v0.1.0-win-x64.zip)** e escolha **Extrair tudo** no Explorador de Arquivos.
+2. Abra a pasta extraída e dê dois cliques em **`instalar.bat`**. Autorize a instalação quando o Windows pedir.
+3. Procure **Overlay** no menu Iniciar e abra. Comece com o jogo em **janela sem bordas**.
 
-```powershell
-git clone https://github.com/Daniellpego/overlay.git
-cd overlay
-```
+O instalador coloca os arquivos em `%ProgramFiles%\Overlay`, cria os atalhos e registra a remoção em **Configurações → Aplicativos → Aplicativos instalados**. O atalho pede administrador para acessar as medições do Windows. <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F10</kbd> oculta ou mostra a faixa.
 
-### 2. Prepare e compile
+O ZIP já contém o PresentMon original da Intel, suas licenças, um manifesto de integridade e o **[LEIA-ME.txt](LEIA-ME.txt)**. A [página da versão](https://github.com/Daniellpego/overlay/releases/tag/v0.1.0) também oferece o SHA-256 do download.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\baixar-presentmon.ps1
-.\build.bat
-```
-
-O script baixa o PresentMon da Intel e confere **SHA-256 e assinatura**. Os executáveis são gerados localmente; não é necessário baixar binários anexados por terceiros.
-
-### 3. Instale e jogue
-
-```powershell
-.\instalar.bat
-```
-
-O Windows pedirá permissão de administrador. O instalador copia o aplicativo para `%ProgramFiles%\Overlay` e o inicia. **Uma atualização encerra a cópia em execução**, então faça isso fora de uma partida.
-
-Depois, abra por `iniciar.bat`. Para carregar no logon, ative **Iniciar com o Windows** no menu da bandeja da cópia instalada, aberta como administrador.
+> **Prévia pública 0.1.0:** instalação e atualização foram verificadas em pastas isoladas. A confirmação do UAC, os atalhos instalados e a remoção em uma instalação real ainda precisam de validação. O executável Overlay não possui assinatura digital; o Windows pode exibir “editor desconhecido”. Confira a origem e o hash do pacote antes de autorizar.
 
 <details>
-<summary><strong>Baixei o ZIP do GitHub. Posso usar?</strong></summary>
+<summary><strong>Atualizar, iniciar com o Windows ou desinstalar</strong></summary>
 
-Sim. Extraia o conteúdo, abra o PowerShell na pasta extraída e siga a partir de **Prepare e compile**. O download do PresentMon requer conexão com a internet.
+**Atualizar:** extraia o pacote novo e execute `instalar.bat` novamente. As preferências de usuário e os logs são preservados. Uma atualização encerra a cópia em execução; faça isso fora de uma partida.
+
+**Cópia antiga sem versão:** o instalador recusa substituir um executável sem identificação. Feche o Overlay e renomeie a pasta antiga em `%ProgramFiles%` antes de instalar. Guarde seus arquivos; as preferências existentes em `%LOCALAPPDATA%\Overlay` continuam sendo usadas.
+
+**Iniciar com o Windows:** ative a opção no menu da bandeja da cópia instalada, aberta como administrador.
+
+**Desinstalar:** escolha **Desinstalar Overlay** no menu Iniciar ou remova pelas Configurações do Windows. Preferências e logs ficam guardados para uma reinstalação. Você também pode usar `desinstalar.bat`.
+
+</details>
+
+<details>
+<summary><strong>Baixei “Code → Download ZIP”. É o mesmo pacote?</strong></summary>
+
+Esse botão baixa o código-fonte. Para instalar sem compilar, use **Baixar Overlay para Windows x64** acima ou o arquivo **Overlay-v0.1.0-win-x64.zip** em Releases. Os arquivos automáticos “Source code” são destinados ao desenvolvimento.
 
 </details>
 
@@ -165,7 +167,7 @@ O aplicativo não injeta código nem lê a memória do jogo. O PresentMon abre h
 
 ## Evidência antes de promessa
 
-O projeto está **em desenvolvimento**. Estes resultados pertencem aos ensaios locais da revisão de 15/10/2026:
+O projeto está em **prévia pública**. Estes resultados pertencem aos ensaios locais da revisão de 15/10/2026:
 
 | Verificação | Resultado observado | Contexto |
 | :--- | :--- | :--- |
@@ -174,6 +176,7 @@ O projeto está **em desenvolvimento**. Estes resultados pertencem aos ensaios l
 | Prova visual de FPS | **30 a 144 FPS** | Cenário sintético; maior diferença observada de 0,7 quadro. |
 | Ping versus Windows | **0 / −1 / 0 ms** de diferença | Três alvos, nas condições do ensaio. |
 | Janela | Foco, clique atravessando e atalho aprovados | Sessão gráfica local. |
+| Distribuição | Integridade, atualização e recuperação de falhas aprovadas | Pastas isoladas; inclui arquivos bloqueados, colisão de destino e caminhos com acentos. |
 | Consumo da janela | **33,1 MB · 0,049% CPU** | Teste leve, **sem jogo e sem PresentMon ativo**. |
 
 **Esses números não comprovam consumo durante partidas.** A meta de menos de 1% de CPU e 50 MB de RAM no conjunto ainda precisa ser verificada com Overlay + PresentMon e no modo alternativo em uso real. Jogos, anticheats, estabilidade prolongada da revisão atual e monitores com escalas diferentes continuam em validação.
@@ -219,10 +222,18 @@ Sim. O padrão é <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>F10</kbd>. O atalho 
 
 ## Testar, entender, contribuir
 
+Para desenvolver, instale o Git e use o compilador do .NET Framework 4.x presente no Windows. Não é necessário instalar o SDK do .NET.
+
 ```powershell
+git clone https://github.com/Daniellpego/overlay.git
+cd overlay
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\baixar-presentmon.ps1
 .\build.bat
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\verificar.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\TesteDistribuicao.ps1
 ```
+
+Para gerar um ZIP oficial a partir de uma revisão limpa: `powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\empacotar.ps1`. O empacotador compila, confere a assinatura Intel e produz ZIP, manifesto e SHA-256 em `.tmp\releases`.
 
 Os testes visuais exigem sessão gráfica e abrem janelas de teste. Se uma outra cópia estiver em uso, os scripts a preservam e podem encerrar com resultado inconclusivo. Neste projeto C# não há etapa npm de lint ou build.
 
