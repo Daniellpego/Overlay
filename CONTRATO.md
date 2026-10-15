@@ -88,3 +88,16 @@ elevada e inicia com o Windows. Config dela em `%LOCALAPPDATA%\Overlay` (só lid
      conferido contra o SHA-256, manifesto íntegro (14 arquivos) e revisão limpa d128e39c022dd9577f54b5c057da156166ef8687.
      O executável efetivamente baixado passou no gate completo: Tudo OK. Distribuição: 32 verificações aprovadas.
      README público conferido no GitHub, com imagens carregadas e link direto do pacote.
+
+8. Correção da primeira instalação (15/10/2026) — **0.1.1, instalação real em revalidação**:
+   - Daniel reproduziu falha do instalador: `Add-Type` não encontrou o arquivo `.cs` em `C:\WINDOWS\TEMP`.
+     Reprodução em PowerShell 5.1 sem instalar: saída 1 antes da correção e 0 depois.
+   - Os dois auxiliares C# existentes foram extraídos sem mudança de comportamento para `tools/Distribuicao.cs`.
+     `build.bat` gera `tools/Overlay.Distribuicao.dll`; instalar/iniciar/remover apenas carregam a DLL pronta.
+   - O pacote exige a DLL e inclui seu hash no manifesto. A versão 0.1.0 permanece histórica;
+     0.1.1 corrige a distribuição sem mudar o cálculo de FPS/ping.
+   - `TesteDistribuicao.ps1`: regressões em processo novo do PowerShell 5.1,
+     TEMP apontando para um arquivo e compilação proibida, com criação segura de configuração e API de fechamento.
+     Inicialização da configuração do usuário também conferida com `C:\WINDOWS\TEMP` sem alterar preferências existentes.
+   - DLL carregada por bytes para não manter bloqueio de arquivo; regressão remove a mesma instalação
+     isolada da qual o auxiliar foi carregado, em processo novo do PowerShell 5.1.

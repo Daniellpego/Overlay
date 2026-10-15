@@ -35,3 +35,4 @@ Overlay leve p/ jogos Windows 11. Escopo, restrições, critérios de falha em `
 ## Regras aprendidas
 - Ao iniciar, ler esta seção. Daniel corrigiu algo → acrescentar `N. [categoria] SEMPRE/NUNCA <ação> porque <motivo>.`
 1. [winforms] SEMPRE primeiro UpdateLayeredWindow em OnShown + sincronizar `Bounds` porque Show() do WinForms sobrescreve posição e tamanho.
+2. [distribuição] NUNCA compilar auxiliares com Add-Type durante instalação/início/remoção; o Windows PowerShell 5.1 falha com TEMP indisponível. Distribuir a DLL compilada e testar esses auxiliares com TEMP inválido.

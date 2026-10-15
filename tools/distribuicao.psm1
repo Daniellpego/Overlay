@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 
 function Get-ArquivosOverlay {
     @('Overlay.exe','config.ini','LEIA-ME.txt','instalar.bat','iniciar.bat','desinstalar.bat',
-      'tools/instalar.ps1','tools/iniciar.ps1','tools/desinstalar.ps1','tools/distribuicao.psm1',
+      'tools/instalar.ps1','tools/iniciar.ps1','tools/desinstalar.ps1','tools/distribuicao.psm1','tools/Overlay.Distribuicao.dll',
       'tools/PresentMon/PresentMon-2.6.0-x64.exe','third-party/PresentMon/LICENSE.txt',
       'third-party/PresentMon/THIRD_PARTY.txt','third-party/PresentMon/ORIGEM.md')
 }
@@ -21,6 +21,16 @@ function Test-AdminOverlay {
     try {
         ([Security.Principal.WindowsPrincipal]$identidade).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     } finally { $identidade.Dispose() }
+}
+
+function Initialize-NativoOverlay {
+    # Somente carrega o auxiliar distribuido; nao usa compilador nem a pasta TEMP.
+    $dll = Get-CaminhoFilhoOverlay $PSScriptRoot 'Overlay.Distribuicao.dll'
+    if (-not (Test-Path -LiteralPath $dll -PathType Leaf)) {
+        throw 'Auxiliar do Overlay ausente. Extraia todo o ZIP novamente ou execute build.bat no codigo-fonte.'
+    }
+    # Carregar em memoria evita manter a propria DLL bloqueada na atualizacao/remocao.
+    [void][Reflection.Assembly]::Load([IO.File]::ReadAllBytes($dll))
 }
 
 function Get-CaminhoFilhoOverlay([string]$Raiz, [string]$Relativo) {
@@ -84,53 +94,7 @@ function Initialize-ConfigOverlay([string]$Raiz) {
 
 function Write-ConfigInicialOverlay([string]$Origem, [string]$Pasta) {
     if (-not ('OverlayDistribuicao.Configuracao' -as [type])) {
-        Add-Type -TypeDefinition @'
-using System;
-using System.IO;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Runtime.InteropServices;
-using Microsoft.Win32.SafeHandles;
-namespace OverlayDistribuicao {
- public static class Configuracao {
-  [StructLayout(LayoutKind.Sequential)] struct Informacao {
-   public uint Atributos;
-   public System.Runtime.InteropServices.ComTypes.FILETIME Criacao, Acesso, Escrita;
-   public uint Volume, TamanhoAlto, TamanhoBaixo, Links, IndiceAlto, IndiceBaixo;
-  }
-  [DllImport("kernel32.dll", EntryPoint="CreateFileW", CharSet=CharSet.Unicode, SetLastError=true)]
-  static extern SafeFileHandle Abrir(string nome, uint acesso, uint compartilhar, IntPtr seguranca, uint modo, uint flags, IntPtr modelo);
-  [DllImport("kernel32.dll", EntryPoint="GetFileInformationByHandle", SetLastError=true)]
-  static extern bool Informar(SafeFileHandle h, out Informacao i);
-  public static void Criar(string origem, string pasta) {
-   string destino = Path.GetFullPath(pasta);
-   if (destino.StartsWith(@"\\")) throw new IOException("Use uma pasta local para a configuracao.");
-   byte[] bytes = File.ReadAllBytes(origem);
-   var travas = new List<SafeFileHandle>();
-   try {
-    string atual = Path.GetPathRoot(destino);
-    string[] partes = destino.Substring(atual.Length).Split('\\');
-    for (int n = -1; n < partes.Length; n++) {
-     if (n >= 0) { atual = Path.Combine(atual, partes[n]); if (!Directory.Exists(atual)) Directory.CreateDirectory(atual); }
-     // Sem compartilhar escrita/exclusao: um ancestral nao pode virar juncao durante a criacao.
-     SafeFileHandle h = Abrir(atual, 0, 1, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero);
-     if (h.IsInvalid) { h.Dispose(); throw new Win32Exception(Marshal.GetLastWin32Error()); }
-     travas.Add(h);
-     Informacao i;
-     if (!Informar(h, out i)) throw new Win32Exception(Marshal.GetLastWin32Error());
-     if ((i.Atributos & 0x400) != 0) throw new IOException("A configuracao nao pode usar links ou juncoes.");
-    }
-    string arquivo = Path.Combine(destino, "config.ini");
-    if (File.Exists(arquivo)) return;
-    FileStream novo;
-    try { novo = new FileStream(arquivo, FileMode.CreateNew, FileAccess.Write, FileShare.None); }
-    catch (IOException) { if (File.Exists(arquivo)) return; throw; }
-    using (novo) novo.Write(bytes, 0, bytes.Length);
-   } finally { for (int n = travas.Count-1; n >= 0; n--) travas[n].Dispose(); }
-  }
- }
-}
-'@
+        Initialize-NativoOverlay
     }
     [OverlayDistribuicao.Configuracao]::Criar($Origem, $Pasta)
 }
@@ -167,21 +131,7 @@ function Test-DestinoOverlay([string]$Raiz) {
 
 function Stop-ProcessosOverlay([string[]]$Caminhos) {
     if (-not ('OverlayDistribuicao.Janelas' -as [type])) {
-        Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-namespace OverlayDistribuicao {
- public static class Janelas {
-  delegate bool EnumProc(IntPtr h, IntPtr l);
-  [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc p, IntPtr l);
-  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
-  [DllImport("user32.dll", EntryPoint="PostMessageW", CharSet=CharSet.Unicode)] static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
-  public static void Fechar(uint alvo) {
-   EnumWindows((h,l)=>{uint pid; GetWindowThreadProcessId(h,out pid); if(pid==alvo) PostMessage(h,0x0010,IntPtr.Zero,IntPtr.Zero); return true;},IntPtr.Zero);
-  }
- }
-}
-'@
+        Initialize-NativoOverlay
     }
     foreach ($registro in Get-CimInstance Win32_Process -Filter "Name='Overlay.exe'") {
         if (-not $registro.ExecutablePath -or $Caminhos -notcontains $registro.ExecutablePath) { continue }

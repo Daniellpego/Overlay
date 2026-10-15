@@ -8,9 +8,9 @@ function Checar([string]$Nome, [bool]$Ok) {
 }
 function Recusa([scriptblock]$Acao) { try { & $Acao | Out-Null; $false } catch { $true } }
 
-# Lista vazia compila a API de fechamento sem autorizar encerrar nenhuma copia.
+# Lista vazia carrega a API de fechamento sem autorizar encerrar nenhuma copia.
 Stop-ProcessosOverlay @()
-Checar 'API de fechamento compila sem tocar em processos de usuario' $true
+Checar 'API de fechamento carrega sem tocar em processos de usuario' $true
 
 $resultado = & (Join-Path $raiz 'tools\empacotar.ps1') -SemCompilar -PermitirTrabalhoLocal
 $pastaTeste = Join-Path $raiz (".tmp\Teste de pacote d'usuario & acentos-ação-" + [Guid]::NewGuid().ToString('N'))
@@ -18,8 +18,38 @@ New-Item -ItemType Directory -Path $pastaTeste -Force | Out-Null
 Expand-Archive -LiteralPath $resultado.Zip -DestinationPath $pastaTeste
 $pacote = Join-Path $pastaTeste ('Overlay-v' + $resultado.Versao + '-win-x64')
 $verificacao = Test-PacoteOverlay $pacote -ExigirManifesto
-Checar 'ZIP extraido preserva integridade em pasta com espacos, apostrofo, & e acentos' ($verificacao.Versao -eq '0.1.0')
+Checar 'ZIP extraido preserva integridade em pasta com espacos, apostrofo, & e acentos' ($verificacao.Versao -eq '0.1.1')
 Checar 'todos os arquivos de uso acompanham o ZIP' ($verificacao.Arquivos -eq @(Get-ArquivosOverlay).Count)
+
+# Processo novo do PowerShell 5.1, sem tipos em cache, TEMP impossivel de usar como pasta.
+$tempBloqueado = Join-Path $pastaTeste 'temp-e-um-arquivo'
+[IO.File]::WriteAllText($tempBloqueado,'nao e uma pasta')
+$testeSemTemp = Join-Path $pastaTeste 'testar-sem-temp.ps1'
+$codigoTeste = @'
+param([string]$Raiz,[string]$Pasta,[string]$TempBloqueado,[switch]$Remover)
+$ErrorActionPreference = 'Stop'
+$env:TEMP=$TempBloqueado
+$env:TMP=$TempBloqueado
+function Add-Type { throw 'Compilacao em tempo de execucao proibida neste teste.' }
+Import-Module (Join-Path $Raiz 'tools/distribuicao.psm1') -Force -DisableNameChecking
+Stop-ProcessosOverlay @()
+Write-ConfigInicialOverlay (Join-Path $Raiz 'config.ini') $Pasta
+if ((Get-FileHash -LiteralPath (Join-Path $Pasta 'config.ini')).Hash -ne (Get-FileHash -LiteralPath (Join-Path $Raiz 'config.ini')).Hash) { throw 'Configuracao nao inicializada.' }
+if ($Remover) {
+    Remove-ProgramaOverlay $Raiz
+    if (Test-Path -LiteralPath (Join-Path $Raiz 'tools/Overlay.Distribuicao.dll')) { throw 'A propria DLL ficou bloqueada durante a remocao.' }
+    if (Test-Path -LiteralPath (Join-Path $Raiz 'Overlay.exe')) { throw 'Remocao nao foi concluida.' }
+}
+Write-Output 'Auxiliares OK sem compilador e sem TEMP.'
+'@
+[IO.File]::WriteAllText($testeSemTemp,($codigoTeste -replace '\r?\n',"`r`n"),[Text.UTF8Encoding]::new($true))
+$saidaSemTemp = & (Get-PowerShellOverlay) -NoProfile -ExecutionPolicy Bypass -File $testeSemTemp -Raiz $pacote -Pasta (Join-Path $pastaTeste 'perfil sem TEMP') -TempBloqueado $tempBloqueado
+Checar 'ZIP carrega auxiliares e cria config no PowerShell 5.1 sem compilacao e com TEMP invalido' ($LASTEXITCODE -eq 0 -and ($saidaSemTemp -join '') -match 'Auxiliares OK')
+Checar 'DLL precompilada acompanha o pacote' (Test-Path -LiteralPath (Join-Path $pacote 'tools/Overlay.Distribuicao.dll'))
+$destinoAutoRemocao = Join-Path $pastaTeste 'instalacao com DLL carregada'
+Copy-ProgramaOverlay $pacote $destinoAutoRemocao
+$saidaAutoRemocao = & (Get-PowerShellOverlay) -NoProfile -ExecutionPolicy Bypass -File $testeSemTemp -Raiz $destinoAutoRemocao -Pasta (Join-Path $pastaTeste 'perfil da remocao') -TempBloqueado $tempBloqueado -Remover
+Checar 'PowerShell 5.1 remove a propria DLL carregada sem bloqueio de arquivo' ($LASTEXITCODE -eq 0 -and ($saidaAutoRemocao -join '') -match 'Auxiliares OK' -and -not (Test-Path -LiteralPath (Join-Path $destinoAutoRemocao 'Overlay.exe')))
 Checar 'pacote nao inclui codigo, testes, logs nem temporarios' (-not (Test-Path (Join-Path $pacote 'src')) -and -not (Test-Path (Join-Path $pacote 'tests')) -and -not (Test-Path (Join-Path $pacote '.tmp')) -and -not (Test-Path (Join-Path $pacote 'overlay.log')))
 $hashEsperado = ([IO.File]::ReadAllText($resultado.Zip + '.sha256') -split '\s+')[0]
 Checar 'SHA-256 publicado corresponde ao ZIP' ((Get-FileHash -LiteralPath $resultado.Zip -Algorithm SHA256).Hash -eq $hashEsperado)

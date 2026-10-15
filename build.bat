@@ -6,6 +6,11 @@ if not exist "%CSC%" (
     echo Compilador C# nao encontrado em %CSC%
     exit /b 1
 )
+rem Auxiliar ja compilado: instalar/iniciar/remover nao dependem de Add-Type e TEMP.
+"%CSC%" /nologo /target:library /platform:x64 /optimize+ /warnaserror+ /codepage:65001 ^
+    /out:"%~dp0tools\Overlay.Distribuicao.dll" ^
+    "%~dp0tools\Distribuicao.cs" "%~dp0src\Versao.cs"
+if errorlevel 1 exit /b 1
 rem /platform:x64: o MonitorRede usa offsets de estruturas ETW de 64 bits.
 "%CSC%" /nologo /target:winexe /platform:x64 /optimize+ /warnaserror+ /codepage:65001 ^
     /out:"%~dp0Overlay.exe" ^
