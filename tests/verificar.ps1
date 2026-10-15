@@ -1,6 +1,6 @@
-# Verificação automática do overlay: abre o Overlay.exe, confere a janela e fecha.
+﻿# Verificação automática do overlay: abre o Overlay.exe, confere a janela e fecha.
 # Uso: powershell -ExecutionPolicy Bypass -File tests\verificar.ps1 [-Exe caminho\Overlay.exe]
-param([string]$Exe = (Join-Path (Split-Path $PSScriptRoot -Parent) 'Overlay.exe'))
+param([string]$Exe = (Join-Path (Split-Path $PSScriptRoot -Parent) 'Overlay.exe'), [switch]$SomenteLogica)
 $ErrorActionPreference = 'Stop'
 $exe = $Exe
 
@@ -63,9 +63,17 @@ RodarTeste 'TesteCalculadoraFps' @('src\CalculadoraFps.cs', 'tests\TesteCalculad
 RodarTeste 'TesteRegressoes' @('src\*.cs', 'tests\TesteRegressoes.cs')
 RodarTeste 'TesteRede' @('src\DetectorServidor.cs', 'src\MedidorPing.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\TesteRede.cs')
 RodarTeste 'TesteSessaoEtw' @('src\MonitorRede.cs', 'src\SessaoEtw.cs', 'src\DetectorServidor.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\TesteSessaoEtw.cs')
-RodarTeste 'ProvaFpsTela' @('src\ContadorTela.cs', 'src\Native.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\ProvaFpsTela.cs')
+if (-not $SomenteLogica) {
+    RodarTeste 'ProvaFpsTela' @('src\ContadorTela.cs', 'src\Native.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\ProvaFpsTela.cs')
+} else { Write-Host '[PULADO] prova grafica: SomenteLogica preserva a partida e suas janelas.' }
 RodarTeste 'ProvaPing' @('src\MedidorPing.cs', 'src\DetectorServidor.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\ProvaPing.cs')
 RodarTeste 'TesteEtapa4' @('src\Atalho.cs', 'src\Faixas.cs', 'src\Config.cs', 'src\InicioAutomatico.cs', 'src\Log.cs', 'src\Pastas.cs', 'tests\TesteEtapa4.cs')
+
+if ($SomenteLogica) {
+    if ($falhas -gt 0) { Write-Host "$falhas falha(s)"; exit 1 }
+    Write-Host 'INCONCLUSIVO para o gate completo: logica aprovada; provas graficas nao executadas.'
+    exit 2
+}
 
 # Só fecha cópias de teste desta pasta. NUNCA fecha o overlay do Daniel (instalado ou de caminho desconhecido):
 # em 2026-10-14 este script derrubou o overlay instalado duas vezes no meio do jogo.

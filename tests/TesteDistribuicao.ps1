@@ -18,7 +18,7 @@ New-Item -ItemType Directory -Path $pastaTeste -Force | Out-Null
 Expand-Archive -LiteralPath $resultado.Zip -DestinationPath $pastaTeste
 $pacote = Join-Path $pastaTeste ('Overlay-v' + $resultado.Versao + '-win-x64')
 $verificacao = Test-PacoteOverlay $pacote -ExigirManifesto
-Checar 'ZIP extraido preserva integridade em pasta com espacos, apostrofo, & e acentos' ($verificacao.Versao -eq '0.1.1')
+Checar 'ZIP extraido preserva integridade em pasta com espacos, apostrofo, & e acentos' ($verificacao.Versao -eq '0.1.2')
 Checar 'todos os arquivos de uso acompanham o ZIP' ($verificacao.Arquivos -eq @(Get-ArquivosOverlay).Count)
 
 # Processo novo do PowerShell 5.1, sem tipos em cache, TEMP impossivel de usar como pasta.
