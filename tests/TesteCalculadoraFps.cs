@@ -21,9 +21,74 @@ static class TesteCalculadoraFps
         CabecalhoSemColunasEsperadas();
         ReinicioDoPresentMonZeraTempo();
         RajadaAuxiliarNaoViraFpsDoJogo();
+        FormatosReaisDoPresentMon();
+        ColunaExplicitaEmMsTemPreferencia();
+        SuperficiesEncerradasSaoLiberadas();
+        PidsInvalidosNaoEntramNaAmostra();
 
         Console.WriteLine(falhas == 0 ? "Calculo de FPS: tudo OK" : "Calculo de FPS: " + falhas + " falha(s)");
         return falhas == 0 ? 0 : 1;
+    }
+
+    static void SuperficiesEncerradasSaoLiberadas()
+    {
+        var c = new CalculadoraFps();
+        c.ProcessarLinha(Cabecalho, 0);
+        c.DefinirAlvo(1234);
+        for (int i = 0; i < 100; i++) c.ProcessarLinha(Linha("Jogo.exe", 1234, "encerrada" + i, i * 1000), i * 1000);
+        Alimentar(c, "Jogo.exe", 1234, "atual", 60, 100000, 2000);
+        var campo = typeof(CalculadoraFps).GetField("framesPorSwapchain", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        var filas = (System.Collections.IDictionary)campo.GetValue(c);
+        Checar("superficies encerradas nao acumulam filas em memoria", filas.Count <= 2 && c.Fps(102000) == 60, "(filas " + filas.Count + ")");
+    }
+
+    static void PidsInvalidosNaoEntramNaAmostra()
+    {
+        var c = new CalculadoraFps();
+        c.ProcessarLinha(Cabecalho, 0);
+        c.DefinirAlvo(1234);
+        foreach (string pid in new[] { "", "-1234", "2147483648", "999999999999999", "12x34", "+" })
+            c.ProcessarLinha("Jogo.exe," + pid + ",0x1,DXGI,0,0,1000,1,1", 1000);
+        Checar("PID invalido ou com overflow e descartado", !c.Fps(1000).HasValue, "");
+        for (double t = 0; t < 2000; t += 10)
+            c.ProcessarLinha("Jogo.exe, +1234 ,0x1,DXGI,0,0," + t.ToString(CultureInfo.InvariantCulture) + ",1,1", t);
+        Checar("PID decimal aceita espacos e sinal positivo", c.Fps(2000) == 100, "");
+    }
+
+    static void FormatosReaisDoPresentMon()
+    {
+        // Cabecalho observado no overlay.log em 15/10/2026, com PresentMon 2.6.0 fixado no pacote.
+        const string real = "Application,ProcessID,SwapChainAddress,PresentRuntime,SyncInterval,PresentFlags,TimeInMs,MsBetweenSimulationStart,MsBetweenPresents,MsInPresentAPI,MsRenderPresentLatency,CPUStartTimeInMs,MsBetweenAppStart,MsCPUBusy,MsCPUWait";
+        foreach (int alvo in new[] { 30, 60, 144, 240 })
+        {
+            var c = new CalculadoraFps();
+            c.ProcessarLinha(real, 0);
+            c.DefinirAlvo(1234);
+            for (double t = 0; t < 2000; t += 1000.0 / alvo)
+            {
+                string linha = "FC27.exe,1234,0x1,DXGI,0,0," + (t * 2).ToString("F4", CultureInfo.InvariantCulture) +
+                    ",0,16.6667,0,0," + t.ToString("F4", CultureInfo.InvariantCulture) + ",0,1,1";
+                c.ProcessarLinha(linha, t);
+            }
+            Checar("cabecalho real CPUStartTimeInMs: " + alvo + " FPS", c.ErroCabecalho == null && c.Fps(2000) == alvo, "(obtido " + c.Fps(2000) + ")");
+        }
+        var legado = new CalculadoraFps();
+        legado.ProcessarLinha("Application,ProcessID,SwapChainAddress,TimeInMs", 0);
+        legado.DefinirAlvo(1234);
+        for (double t = 0; t < 2000; t += 1000.0 / 75)
+            legado.ProcessarLinha("Jogo.exe,1234,0x1," + t.ToString("F4", CultureInfo.InvariantCulture), t);
+        Checar("TimeInMs legado permanece em milissegundos", legado.Fps(2000) == 75, "");
+    }
+
+    static void ColunaExplicitaEmMsTemPreferencia()
+    {
+        var c = new CalculadoraFps();
+        c.ProcessarLinha("Application,ProcessID,SwapChainAddress,CPUStartTime,CPUStartTimeInMs,TimeInMs", 0);
+        c.DefinirAlvo(1234);
+        for (double t = 0; t < 2000; t += 10)
+            c.ProcessarLinha("Jogo.exe,1234,0x1," + (t * 2).ToString(CultureInfo.InvariantCulture) + "," +
+                t.ToString(CultureInfo.InvariantCulture) + "," + (t * 3).ToString(CultureInfo.InvariantCulture), t);
+        Checar("CPUStartTimeInMs tem prioridade entre colunas validas", c.Fps(2000) == 100, "");
     }
 
     static void RajadaAuxiliarNaoViraFpsDoJogo()

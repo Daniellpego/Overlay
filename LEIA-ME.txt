@@ -1,4 +1,4 @@
-OVERLAY 0.1.1 — WINDOWS 11 x64
+OVERLAY 0.1.2 — WINDOWS 11 x64
 FPS, ping e horário no canto da tela.
 
 COMECE AQUI

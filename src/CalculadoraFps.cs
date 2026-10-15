@@ -5,7 +5,7 @@ using System.Globalization;
 namespace Overlay
 {
     // Lógica pura (sem processo nem janela) para poder ser testada com CSV sintético em tests\TesteCalculadoraFps.cs.
-    // Usa só CPUStartTime: os intervalos entre inícios de frame são os intervalos entre Present(), igual ao "FPS" dos overlays comuns.
+    // Tempos em ms: CPUStartTimeInMs/CPUStartTime; TimeInMs para o CSV legado.
     class CalculadoraFps
     {
         public const double JanelaMs = 1000;
@@ -17,9 +17,10 @@ namespace Overlay
         int indiceSwapchain = -1;
         int indiceTempo = -1;
         int maiorIndice = -1;
-        int pidAlvo;
+        volatile int pidAlvo;
         double ultimoTempoFrame;
         double ultimaChegadaMs = double.MinValue;
+        double proximaLimpezaMs;
 
         public string ErroCabecalho { get; private set; }
 
@@ -32,6 +33,7 @@ namespace Overlay
                 framesPorSwapchain.Clear();
                 ultimoTempoFrame = 0;
                 ultimaChegadaMs = double.MinValue;
+                proximaLimpezaMs = 0;
             }
         }
 
@@ -46,22 +48,25 @@ namespace Overlay
             }
             if (maiorIndice < 0) return;
 
-            string[] campos = linha.Split(',');
-            if (campos.Length <= maiorIndice) return;
-
+            // PresentMon envia quadros de todos os processos: descartar outros PIDs antes de alocar strings.
+            int inicioPid, tamanhoPid;
             int pid;
-            if (!int.TryParse(campos[indicePid], NumberStyles.Integer, CultureInfo.InvariantCulture, out pid)) return;
+            if (!LocalizarCampo(linha, indicePid, out inicioPid, out tamanhoPid) ||
+                !LerPid(linha, inicioPid, tamanhoPid, out pid) || pid == 0 || pid != pidAlvo) return;
 
             lock (trava)
             {
                 if (pid != pidAlvo || pid == 0) return;
 
+                int inicioTempo, tamanhoTempo, inicioSwapchain, tamanhoSwapchain;
+                if (!LocalizarCampo(linha, indiceTempo, out inicioTempo, out tamanhoTempo) ||
+                    !LocalizarCampo(linha, indiceSwapchain, out inicioSwapchain, out tamanhoSwapchain)) return;
                 double tempo;
-                if (!double.TryParse(campos[indiceTempo], NumberStyles.Float, CultureInfo.InvariantCulture, out tempo) ||
+                if (!double.TryParse(linha.Substring(inicioTempo, tamanhoTempo), NumberStyles.Float, CultureInfo.InvariantCulture, out tempo) ||
                     double.IsNaN(tempo) || double.IsInfinity(tempo) || tempo < 0) return;
 
                 Queue<double> fila;
-                string swapchain = campos[indiceSwapchain];
+                string swapchain = linha.Substring(inicioSwapchain, tamanhoSwapchain);
                 if (!framesPorSwapchain.TryGetValue(swapchain, out fila))
                 {
                     fila = new Queue<double>();
@@ -71,8 +76,59 @@ namespace Overlay
                 while (fila.Count > 0 && fila.Peek() < tempo - JanelaMs) fila.Dequeue();
 
                 if (tempo > ultimoTempoFrame) ultimoTempoFrame = tempo;
+                PodarSuperficies();
                 ultimaChegadaMs = agoraMs;
             }
+        }
+
+        void PodarSuperficies()
+        {
+            if (ultimoTempoFrame < proximaLimpezaMs) return;
+            proximaLimpezaMs = ultimoTempoFrame + JanelaMs;
+            List<string> vazias = null;
+            foreach (KeyValuePair<string, Queue<double>> par in framesPorSwapchain)
+            {
+                Queue<double> fila = par.Value;
+                while (fila.Count > 0 && fila.Peek() < ultimoTempoFrame - JanelaMs) fila.Dequeue();
+                if (fila.Count == 0)
+                {
+                    if (vazias == null) vazias = new List<string>();
+                    vazias.Add(par.Key);
+                }
+            }
+            if (vazias != null) foreach (string chave in vazias) framesPorSwapchain.Remove(chave);
+        }
+
+        static bool LocalizarCampo(string linha, int indice, out int inicio, out int tamanho)
+        {
+            inicio = 0;
+            tamanho = 0;
+            for (int i = 0; i < indice; i++)
+            {
+                int separador = linha.IndexOf(',', inicio);
+                if (separador < 0) return false;
+                inicio = separador + 1;
+            }
+            int fim = linha.IndexOf(',', inicio);
+            tamanho = (fim < 0 ? linha.Length : fim) - inicio;
+            return true;
+        }
+
+        static bool LerPid(string linha, int inicio, int tamanho, out int pid)
+        {
+            pid = 0;
+            int fim = inicio + tamanho;
+            while (inicio < fim && char.IsWhiteSpace(linha[inicio])) inicio++;
+            while (fim > inicio && char.IsWhiteSpace(linha[fim - 1])) fim--;
+            if (inicio < fim && linha[inicio] == '+') inicio++;
+            if (inicio == fim) return false;
+            for (int i = inicio; i < fim; i++)
+            {
+                int digito = linha[i] - '0';
+                if (digito < 0 || digito > 9 || pid > (int.MaxValue - digito) / 10) return false;
+                pid = pid * 10 + digito;
+            }
+            return true;
         }
 
         // null = sem dados recentes do processo em primeiro plano (desktop, jogo em loading longo, PresentMon parado).
@@ -113,7 +169,9 @@ namespace Overlay
         {
             int pid = Array.IndexOf(colunas, "ProcessID");
             int swapchain = Array.IndexOf(colunas, "SwapChainAddress");
-            int tempo = Array.IndexOf(colunas, "CPUStartTime");
+            int tempo = Array.IndexOf(colunas, "CPUStartTimeInMs");
+            if (tempo < 0) tempo = Array.IndexOf(colunas, "CPUStartTime");
+            if (tempo < 0) tempo = Array.IndexOf(colunas, "TimeInMs");
 
             lock (trava)
             {
@@ -130,6 +188,7 @@ namespace Overlay
                 ErroCabecalho = null;
                 framesPorSwapchain.Clear();
                 ultimoTempoFrame = 0;
+                proximaLimpezaMs = 0;
             }
         }
     }
