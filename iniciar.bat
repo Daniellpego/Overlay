@@ -1,6 +1,6 @@
 @echo off
-rem Abre o overlay como administrador (o PresentMon e a deteccao do servidor precisam disso).
-rem Usa a copia instalada em Program Files quando existir; senao, a da pasta do projeto.
-set "EXE=%ProgramFiles%\Overlay\Overlay.exe"
-if not exist "%EXE%" set "EXE=%~dp0Overlay.exe"
-powershell -NoProfile -Command "Start-Process -FilePath '%EXE%' -Verb RunAs"
+setlocal DisableDelayedExpansion
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\iniciar.ps1"
+set "OVERLAY_RESULTADO=%ERRORLEVEL%"
+if not "%OVERLAY_RESULTADO%"=="0" pause
+exit /b %OVERLAY_RESULTADO%

@@ -73,7 +73,7 @@ namespace Overlay
             bandeja = new NotifyIcon
             {
                 Icon = SystemIcons.Application,
-                Text = "Overlay (horário, ping, FPS)",
+                Text = "Overlay " + Versao.Atual + " (horário, ping, FPS)",
                 ContextMenuStrip = menu,
                 Visible = true
             };

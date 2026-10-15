@@ -1,0 +1,61 @@
+OVERLAY 0.1.0 — WINDOWS 11 x64
+FPS, ping e horário no canto da tela.
+
+COMECE AQUI
+1. Extraia TODO o ZIP para uma pasta. Não execute de dentro do ZIP.
+2. Dê dois cliques em instalar.bat e autorize o pedido do Windows.
+3. Abra "Overlay" pelo menu Iniciar.
+
+Não é necessário Git, compilador, SDK ou baixar o PresentMon separadamente
+quando você usa o ZIP pronto da página Releases.
+
+CONTROLES
+Ctrl + Shift + F10: ocultar ou mostrar.
+Botão direito no ícone da bandeja: configuração, diagnóstico e saída.
+Para mudar aparência: Abrir config.ini > salvar > Recarregar config.ini.
+Para iniciar no logon: Iniciar com o Windows, no menu da bandeja (com admin).
+
+ENTENDA A LEITURA
+FPS   = taxa de apresentações medida pelo PresentMon.
+FPS*  = estimativa pela tela; não confirma todos os frames renderizados.
+ms?   = ping de um destino provável, sem identidade de servidor confirmada.
+ms*   = ping do endereço configurado, não necessariamente o servidor do jogo.
+ADM   = abra pelo menu Iniciar ou iniciar.bat e autorize o Windows.
+---   = dados insuficientes. Confira o diagnóstico no menu da bandeja.
+
+ATUALIZAR
+Baixe e extraia o ZIP novo e execute instalar.bat. A configuração é preservada.
+Faça a atualização fora de uma partida: a cópia anterior precisa ser encerrada.
+Se a cópia antiga não tem versão, o instalador recusa substituí-la. Feche o
+Overlay e renomeie a pasta antiga em Program Files antes de instalar a nova.
+Não apague suas preferências ou logs.
+
+DESINSTALAR
+Use "Desinstalar Overlay" no menu Iniciar, Aplicativos instalados do Windows,
+ou desinstalar.bat. Preferências e logs são preservados.
+
+ARQUIVOS
+Programa: %ProgramFiles%\Overlay
+Configuração: %LOCALAPPDATA%\Overlay\config.ini
+Log: %ProgramFiles%\Overlay\log\overlay.log
+
+SE NÃO APARECER
+Use janela sem bordas; tela cheia exclusiva pode ocultar a janela externa.
+Confira o atalho de ocultar/mostrar e o ícone da bandeja.
+Consulte o diagnóstico de FPS e o IP medido no menu.
+
+SOBRE ESTA VERSÃO
+Prévia pública. Os testes locais passaram; compatibilidade por jogo,
+anticheat, consumo durante partidas e estabilidade prolongada da revisão
+atual ainda precisam de validação. Não há promessa de ganho de FPS.
+Instalação/UAC/atalhos/remoção reais ainda aguardam validação administrativa.
+O executável Overlay ainda não tem assinatura digital de editor.
+O PresentMon incluído é o binário original, com hash e assinatura verificados
+durante o empacotamento. Licenças em third-party\PresentMon.
+
+DOWNLOADS E AJUDA
+https://github.com/Daniellpego/overlay/releases
+https://github.com/Daniellpego/overlay/issues
+
+Leia o README no GitHub para mais detalhes. Ao publicar um log, revise
+seu conteúdo para não expor informações que você queira manter privadas.

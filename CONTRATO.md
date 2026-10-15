@@ -71,3 +71,16 @@ elevada e inicia com o Windows. Config dela em `%LOCALAPPDATA%\Overlay` (só lid
      Projeto C# sem package.json: lint/build npm não se aplicam; compilador C# trata avisos como erro.
    - Revalidar jogos/anticheat, consumo total com admin e telas de escalas diferentes no ambiente de uso.
      O teste histórico de 1 h acima não comprova estabilidade desta revisão.
+
+7. Distribuição pública 0.1.0 (15/10/2026) — **prévia pública; instalação administrativa real pendente**:
+   - ZIP Windows x64 pré-compilado com PresentMon 2.6.0 original, licenças, guia e manifesto SHA-256.
+   - Instalador cria atalhos no menu Iniciar e registro de desinstalação; atualização mantém preferências.
+     Executável antigo sem identidade de produto exige renomear a pasta antiga antes de instalar.
+   - Configuração inicial criada exclusivamente, sem sobrescrever preferências; ancestrais bloqueados contra
+     troca por junções durante a criação, inclusive quando o instalador já é aberto como administrador.
+     O aplicativo elevado continua apenas lendo a configuração do usuário.
+   - Falhas de atualização/restauração e remoção verificadas com bloqueio real de arquivo em pasta isolada.
+     Remoção conserva preferências e logs; falha de recuperação conserva backup para restauração manual.
+   - `tests/TesteDistribuicao.ps1`: pacote, manifesto, caminhos especiais, colisão, junção, recuperação e scripts.
+     Gate completo `tests/verificar.ps1`: Tudo OK. Instalação/UAC/atalhos/remoção reais não executados nesta sessão.
+   - A versão tem download pronto para uso, mas não representa homologação em todos os jogos nem estabilidade final.
