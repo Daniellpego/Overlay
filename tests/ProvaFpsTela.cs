@@ -30,10 +30,14 @@ static class ProvaFpsTela
 
     static Janela jogo, overlayFalso, ruido;
     static ContadorTela contador;
+    // Diagnóstico: --sem-overlay / --sem-ruido desligam a janela correspondente (para achar a origem de quadros extras).
+    static bool comOverlay = true, comRuido = true;
 
     [STAThread]
-    static int Main()
+    static int Main(string[] args)
     {
+        comOverlay = Array.IndexOf(args, "--sem-overlay") < 0;
+        comRuido = Array.IndexOf(args, "--sem-ruido") < 0;
         int[] ritmos = { 30, 60, 90, 120, 144 };
         jogo = new Janela(40, 260, 240, 180);
         ruido = new Janela(320, 260, 160, 120);
@@ -109,8 +113,8 @@ static class ProvaFpsTela
                 proxima += periodoMs;
                 if (proxima < agora) proxima = agora + periodoMs; // atrasou: não acumula rajada
             }
-            if (agora >= proximoOverlay) { Trocar(overlayFalso, ref a2, Color.DarkGreen, Color.Black); proximoOverlay += 500; }
-            if (agora >= proximoRuido) { Trocar(ruido, ref a3, Color.Orange, Color.Purple); proximoRuido += 20; }
+            if (comOverlay && agora >= proximoOverlay) { Trocar(overlayFalso, ref a2, Color.DarkGreen, Color.Black); proximoOverlay += 500; }
+            if (comRuido && agora >= proximoRuido) { Trocar(ruido, ref a3, Color.Orange, Color.Purple); proximoRuido += 20; }
             if (agora >= inicioMedidaMs && trocasNoInicioDaMedida < 0) trocasNoInicioDaMedida = trocas;
             if (amostras != null && agora >= proximaAmostraMs)
             {

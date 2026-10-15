@@ -94,6 +94,8 @@ namespace Overlay
         }
 
         // Quadros por segundo do jogo, ou null sem dados recentes.
+        // Usa o tempo entre o primeiro e o último quadro da janela de 1 s (como a CalculadoraFps), não a contagem:
+        // contar "quantos caíram no último segundo" erra ±1 quadro na borda, o que a 30 FPS já dá ±3%.
         public int? Fps()
         {
             long agora = Qpc();
@@ -101,9 +103,19 @@ namespace Overlay
             {
                 if (quadros.Count == 0 || MsEntre(ultimoQuadroQpc, agora) > ValidadeMs) return null;
                 Podar(agora);
-                int total = 0;
-                foreach (KeyValuePair<long, int> q in quadros) total += q.Value;
-                return total;
+                if (quadros.Count < 2) return quadros.Count;
+                long primeiro = 0, ultimo = 0;
+                int depoisDoPrimeiro = 0;
+                bool comecou = false;
+                foreach (KeyValuePair<long, int> q in quadros)
+                {
+                    if (!comecou) { primeiro = q.Key; comecou = true; continue; }
+                    depoisDoPrimeiro += q.Value;
+                    ultimo = q.Key;
+                }
+                double ms = MsEntre(primeiro, ultimo);
+                if (ms <= 0) return null;
+                return (int)Math.Round(depoisDoPrimeiro * 1000.0 / ms);
             }
         }
 

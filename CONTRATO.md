@@ -39,6 +39,10 @@ elevada e inicia com o Windows. Config dela em `%LOCALAPPDATA%\Overlay` (só lid
    (`diagnosticar.bat`: até sessão vazia do `logman` dá "Acesso negado"). PresentMon e detecção do servidor ficam bloqueados (`BLQ`, `ms*`).
    Plano B: `ContadorTela` conta os quadros que chegam ao monitor pela Desktop Duplication (API do OBS/Discord, sem tocar no jogo
    e sem ETW) e mostra `FPS*`. Medido com o FC aberto: funciona, ~0,5% CPU. Limites: teto = taxa do monitor (240 Hz),
-   conta a tela inteira, +20-30 MB de RAM só enquanto o bloqueio durar. Falta validar com limitador de FPS no FC.
+   +20-30 MB de RAM só enquanto o bloqueio durar.
+   Desde 2026-10-14 21:30 conta só mudanças dentro da janela do jogo e fora do overlay (retângulos alterados da Desktop
+   Duplication) e calcula pelo tempo entre quadros. `tests\ProvaFpsTela.cs` (gabarito 30-144/s, ruído 50/s ao lado,
+   overlay falso por cima): erro máximo 1,3 quadro em 3 rodadas; sem ruído, +0,3. Resíduo: o Windows às vezes junta
+   áreas alteradas vizinhas num retângulo só. `provar-no-jogo.bat` compara PresentMon x tela e ping x ping.exe no jogo real.
 5. Revisão independente (subagente de contexto limpo) — **feita em 2026-10-14: 10 achados, 1–9 corrigidos** (10, DPI por monitor, adiado).
    Falta: `verificar-admin.bat` (CPU/RAM com tudo ligado), revalidar a detecção do servidor e o teste de 1 h jogando.
