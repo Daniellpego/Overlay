@@ -46,3 +46,7 @@ elevada e inicia com o Windows. Config dela em `%LOCALAPPDATA%\Overlay` (só lid
    áreas alteradas vizinhas num retângulo só. `provar-no-jogo.bat` compara PresentMon x tela e ping x ping.exe no jogo real.
 5. Revisão independente (subagente de contexto limpo) — **feita em 2026-10-14: 10 achados, 1–9 corrigidos** (10, DPI por monitor, adiado).
    Falta: `verificar-admin.bat` (CPU/RAM com tudo ligado), revalidar a detecção do servidor e o teste de 1 h jogando.
+   **Teste de 1 h (2026-10-14 21:27-22:26, FC 27 aberto o tempo todo, `tests\monitorar-estabilidade.ps1`):** 118 amostras,
+   0 quedas, mesmo processo do início ao fim; CPU média 0,25% (pico 3,1%); RAM privada 17-24 MB, sem subir (23,5 MB nas
+   10 primeiras x 21,4 MB nas 10 últimas); handles oscilando 484-677 sem tendência (606 no início, 615 no fim);
+   12 prints mostrando FPS*, ms* e horário atualizados até o fim.
