@@ -36,6 +36,7 @@ static class ProvaFpsTela
     [STAThread]
     static int Main(string[] args)
     {
+        Native.ConfigurarDpi();
         comOverlay = Array.IndexOf(args, "--sem-overlay") < 0;
         comRuido = Array.IndexOf(args, "--sem-ruido") < 0;
         int[] ritmos = { 30, 60, 90, 120, 144 };
@@ -103,6 +104,8 @@ static class ProvaFpsTela
         long trocas = 0, trocasNoInicioDaMedida = -1;
         double inicioMedidaMs = 2000, proximaAmostraMs = 3000;
         bool a1 = false, a2 = false, a3 = false;
+        var momentos = new Queue<double>();
+        var taxasReais = new List<double>();
         while (relogio.Elapsed.TotalMilliseconds < segundos * 1000)
         {
             double agora = relogio.Elapsed.TotalMilliseconds;
@@ -110,6 +113,7 @@ static class ProvaFpsTela
             {
                 Trocar(jogo, ref a1, Color.DarkRed, Color.DarkBlue);
                 trocas++;
+                momentos.Enqueue(relogio.Elapsed.TotalMilliseconds);
                 proxima += periodoMs;
                 if (proxima < agora) proxima = agora + periodoMs; // atrasou: não acumula rajada
             }
@@ -120,11 +124,24 @@ static class ProvaFpsTela
             {
                 int? fps = contador.Fps();
                 amostras.Add(fps.HasValue ? fps.Value : 0);
+                // Compare a mesma janela temporal do contador. A média global de 4 s
+                // não é gabarito para três leituras de 1 s quando o Windows atrasa desenhos.
+                while (momentos.Count > 0 && momentos.Peek() < agora - 1000) momentos.Dequeue();
+                double ultimo = 0;
+                foreach (double momento in momentos) ultimo = momento;
+                taxasReais.Add(momentos.Count > 1 && ultimo > momentos.Peek()
+                    ? (momentos.Count - 1) * 1000.0 / (ultimo - momentos.Peek()) : 0);
                 proximaAmostraMs += 1000;
             }
             Application.DoEvents();
         }
         double duracaoMedida = (relogio.Elapsed.TotalMilliseconds - inicioMedidaMs) / 1000.0;
         taxaReal = (trocas - trocasNoInicioDaMedida) / duracaoMedida;
+        if (taxasReais.Count > 0)
+        {
+            double soma = 0;
+            foreach (double taxa in taxasReais) soma += taxa;
+            taxaReal = soma / taxasReais.Count;
+        }
     }
 }

@@ -1,4 +1,4 @@
-﻿# Verificação com tudo ligado (PresentMon + sessão ETW de rede). Precisa de administrador: rode verificar-admin.bat.
+# Verificação com tudo ligado (PresentMon + sessão ETW de rede). Precisa de administrador: rode verificar-admin.bat.
 # Mede CPU e RAM somando Overlay + PresentMon, confere as sessões ETW e se elas somem ao fechar.
 # Para uma medida realista, deixe algo apresentando frames (jogo, vídeo, navegador animado) durante os 30 s.
 param([string]$Exe = (Join-Path (Split-Path $PSScriptRoot -Parent) 'Overlay.exe'))
@@ -35,7 +35,22 @@ $log = if ($instalado) { Join-Path $pastaExe 'log\overlay.log' } else { Join-Pat
 Write-Host "Testando $Exe (log: $log)"
 $linhasAntes = if (Test-Path $log) { (Get-Content $log).Count } else { 0 }
 
-foreach ($p in Get-Process Overlay -ErrorAction SilentlyContinue) { [FecharOverlay]::Pedir([uint32]$p.Id); [void]$p.WaitForExit(5000) }
+$exeTeste = (Resolve-Path $Exe).Path
+$raizTeste = [IO.Path]::GetFullPath((Split-Path $PSScriptRoot -Parent)).TrimEnd('\') + '\'
+if (-not $exeTeste.StartsWith($raizTeste, [StringComparison]::OrdinalIgnoreCase) -or $instalado) {
+    throw 'Verificação recusada: use somente uma cópia de teste dentro do projeto, fora de Program Files.'
+}
+foreach ($p in Get-CimInstance Win32_Process -Filter "Name='Overlay.exe'") {
+    if (-not $p.ExecutablePath -or $p.ExecutablePath -ine $exeTeste) {
+        Write-Host 'INCONCLUSIVO: overlay de uso aberto; preservado. Testes administrativos não executados.'
+        exit 2
+    }
+    $processoTeste = Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue
+    if ($processoTeste) {
+        [FecharOverlay]::Pedir([uint32]$p.ProcessId)
+        if (-not $processoTeste.WaitForExit(5000)) { throw 'Cópia de teste não encerrou; teste cancelado.' }
+    }
+}
 $overlay = Start-Process $Exe -PassThru
 Write-Host 'Aguardando 10 s para tudo subir...'
 Start-Sleep -Seconds 10

@@ -22,6 +22,8 @@ namespace Overlay
         readonly NotifyIcon bandeja;
         readonly ToolStripMenuItem itemMostrar;
         readonly ToolStripMenuItem itemInicioAutomatico;
+        readonly ToolStripMenuItem itemDiagnosticoFps;
+        readonly ToolStripMenuItem itemDestinoPing;
         bool atalhoRegistrado;
         readonly LeitorFps leitorFps = new LeitorFps();
         ContadorTela contadorTela;
@@ -37,20 +39,16 @@ namespace Overlay
             this.config = config;
 
             FormBorderStyle = FormBorderStyle.None;
+            AutoScaleMode = AutoScaleMode.None;
             ShowInTaskbar = false;
             StartPosition = FormStartPosition.Manual;
             TopMost = true;
 
             leitorFps.Iniciar();
 
-            bool detectar = config.DetectarServidorJogo && LeitorFps.EhAdministrador();
-            if (detectar)
-            {
-                monitorRede = new MonitorRede(detectorServidor, relogio);
-                if (!monitorRede.Iniciar()) monitorRede = null;
-            }
+            AtualizarMonitorRede();
             medidorPing = new MedidorPing(config.AlvoPing,
-                monitorRede == null ? (Func<System.Net.IPAddress>)null : () => detectorServidor.Servidor(relogio.Elapsed.TotalMilliseconds));
+                () => this.config.DetectarServidorJogo && monitorRede != null ? detectorServidor.Servidor(relogio.Elapsed.TotalMilliseconds) : null);
             medidorPing.Iniciar();
 
             itemMostrar = new ToolStripMenuItem("Ocultar overlay", null, (s, e) => AlternarVisivel());
@@ -60,9 +58,15 @@ namespace Overlay
                 menu.Items.Add("Reiniciar como administrador (FPS)", null, (s, e) => ReiniciarComoAdmin());
             itemInicioAutomatico = new ToolStripMenuItem("Iniciar com o Windows", null, (s, e) => AlternarInicioAutomatico());
             menu.Items.Add(itemInicioAutomatico);
-            menu.Opening += (s, e) => AtualizarItemInicioAutomatico();
+            menu.Opening += (s, e) => { AtualizarItemInicioAutomatico(); AtualizarDiagnostico(); };
             menu.Items.Add("Recarregar config.ini", null, (s, e) => RecarregarConfig());
             menu.Items.Add("Abrir config.ini", null, (s, e) => AbrirConfig());
+            menu.Items.Add(new ToolStripSeparator());
+            itemDiagnosticoFps = new ToolStripMenuItem { Enabled = false };
+            itemDestinoPing = new ToolStripMenuItem { Enabled = false };
+            menu.Items.Add(itemDiagnosticoFps);
+            menu.Items.Add(itemDestinoPing);
+            menu.Items.Add(new ToolStripMenuItem("FPS*: estimativa da tela; ms?: destino provável; ms*: alvo configurado") { Enabled = false });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Sair", null, (s, e) => Close());
 
@@ -109,7 +113,7 @@ namespace Overlay
             if (leitorFps.Estado == EstadoFps.SemAdmin)
                 bandeja.ShowBalloonTip(5000, "Overlay sem FPS",
                     "Para medir o FPS, abra pelo iniciar.bat (pede administrador) ou use o menu do ícone.", ToolTipIcon.Info);
-            else if (leitorFps.Estado == EstadoFps.SemPresentMon)
+            else if (leitorFps.Estado == EstadoFps.SemPresentMon && !config.FpsPelaTela)
                 bandeja.ShowBalloonTip(5000, "Overlay sem FPS",
                     "PresentMon não encontrado. Rode tools\\baixar-presentmon.ps1.", ToolTipIcon.Warning);
         }
@@ -143,10 +147,10 @@ namespace Overlay
 
         void Tick()
         {
-            if (!Visible) return;
             int pidFrente = Native.ProcessoEmPrimeiroPlano();
             leitorFps.DefinirProcessoAlvo(pidFrente);
             detectorServidor.DefinirAlvo(pidFrente);
+            if (!Visible) return;
             Redesenhar(false);
 
             // Alguns jogos em tela cheia sem borda se colocam por cima; reafirmar o topo a cada ~2 s é barato.
@@ -186,20 +190,21 @@ namespace Overlay
         static string TextoPing(int? ms, OrigemPing origem)
         {
             if (!ms.HasValue) return "--- ms";
-            // "*" = não é o servidor da partida (sem partida detectada ou servidor que bloqueia ping): é o alvo_ping do config.
-            return Math.Min(ms.Value, 999).ToString().PadLeft(3) + (origem == OrigemPing.ServidorDoJogo ? " ms" : " ms*");
+            // "?" = destino provável pela heurística; "*" = alvo_ping configurado.
+            return Math.Min(ms.Value, 999).ToString().PadLeft(3) + (origem == OrigemPing.ServidorDoJogo ? " ms?" : " ms*");
         }
 
-        // PresentMon (FPS do jogo em primeiro plano) normalmente. Quando o Windows recusa a sessão dele mesmo como admin
-        // (anticheat do FC 27) e fps_pela_tela = sim, usa o ContadorTela. Ele só existe enquanto o bloqueio durar
-        // (custa ~20-30 MB de RAM do Direct3D e ~0,5% de CPU).
+        // PresentMon normalmente. Falha ou ausência de dados (com admin) permite a estimativa da tela.
+        // Ela é encerrada quando os dados normais voltam ou a configuração a desliga.
         int? LerFps(out bool pelaTela)
         {
-            pelaTela = leitorFps.Bloqueado && config.FpsPelaTela;
+            // Consulta os dados antes de decidir: uma captura válida encerra o modo alternativo.
+            int? normal = leitorFps.Fps();
+            pelaTela = !normal.HasValue && leitorFps.PrecisaAlternativa && config.FpsPelaTela;
             if (!pelaTela)
             {
                 if (contadorTela != null) { contadorTela.Dispose(); contadorTela = null; }
-                return leitorFps.Estado == EstadoFps.SemAdmin ? null : leitorFps.Fps();
+                return normal;
             }
             if (contadorTela == null)
             {
@@ -245,12 +250,18 @@ namespace Overlay
         void Redesenhar(bool forcar)
         {
             List<Trecho> trechos = MontarTrechos();
+            // Mover primeiro permite consultar o DPI do monitor escolhido, inclusive na primeira abertura.
+            Point posicaoAtual = Posicao(Width, Height);
+            if (Location != posicaoAtual) Location = posicaoAtual;
+            float escala = Native.DpiDaJanela(Handle) / 96f;
+            int paddingX = (int)Math.Round(PaddingX * escala), paddingY = (int)Math.Round(PaddingY * escala);
             var chave = new System.Text.StringBuilder();
+            chave.Append(escala).Append('|');
             foreach (Trecho t in trechos) chave.Append(t.Texto).Append('|').Append(t.Cor.ToArgb()).Append(';');
             if (!forcar && chave.ToString() == ultimoTexto) return;
             ultimoTexto = chave.ToString();
 
-            using (var fonte = new Font(config.Fonte, config.TamanhoFonte, FontStyle.Bold, GraphicsUnit.Point))
+            using (var fonte = new Font(config.Fonte, config.TamanhoFonte * escala, FontStyle.Bold, GraphicsUnit.Point))
             using (var formato = new StringFormat(StringFormat.GenericTypographic))
             {
                 // Sem MeasureTrailingSpaces o GDI+ ignora os espaços no fim de cada trecho e os pedaços se sobrepõem.
@@ -270,8 +281,8 @@ namespace Overlay
                         alturaTexto = Math.Max(alturaTexto, tamanho.Height);
                     }
                 }
-                int largura = (int)Math.Ceiling(larguraTexto) + PaddingX * 2;
-                int altura = (int)Math.Ceiling(alturaTexto) + PaddingY * 2;
+                int largura = (int)Math.Ceiling(larguraTexto) + paddingX * 2;
+                int altura = (int)Math.Ceiling(alturaTexto) + paddingY * 2;
 
                 using (var bmp = new Bitmap(largura, altura, PixelFormat.Format32bppArgb))
                 {
@@ -282,14 +293,14 @@ namespace Overlay
                         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
 
                         using (var fundo = new SolidBrush(Color.FromArgb(config.OpacidadeFundo, 0, 0, 0)))
-                        using (var forma = Retangulo(new Rectangle(0, 0, largura - 1, altura - 1), RaioBorda))
+                        using (var forma = Retangulo(new Rectangle(0, 0, largura - 1, altura - 1), (int)Math.Round(RaioBorda * escala)))
                             g.FillPath(fundo, forma);
 
-                        float x = PaddingX;
+                        float x = paddingX;
                         for (int i = 0; i < trechos.Count; i++)
                         {
                             using (var pincel = new SolidBrush(trechos[i].Cor))
-                                g.DrawString(trechos[i].Texto, fonte, pincel, x, PaddingY, formato);
+                                g.DrawString(trechos[i].Texto, fonte, pincel, x, paddingY, formato);
                             x += larguras[i];
                         }
                     }
@@ -308,9 +319,15 @@ namespace Overlay
             Screen[] telas = Screen.AllScreens;
             Rectangle area = (config.Monitor < telas.Length ? telas[config.Monitor] : Screen.PrimaryScreen).Bounds;
 
-            int x = config.Canto.EndsWith("esquerdo") ? area.Left + config.MargemX : area.Right - largura - config.MargemX;
-            int y = config.Canto.StartsWith("superior") ? area.Top + config.MargemY : area.Bottom - altura - config.MargemY;
-            return new Point(x, y);
+            return LimitarPosicao(area, new Size(largura, altura), config);
+        }
+
+        internal static Point LimitarPosicao(Rectangle area, Size tamanho, Config c)
+        {
+            int x = c.Canto.EndsWith("esquerdo") ? area.Left + c.MargemX : area.Right - tamanho.Width - c.MargemX;
+            int y = c.Canto.StartsWith("superior") ? area.Top + c.MargemY : area.Bottom - tamanho.Height - c.MargemY;
+            return new Point(Math.Max(area.Left, Math.Min(x, area.Right - tamanho.Width)),
+                Math.Max(area.Top, Math.Min(y, area.Bottom - tamanho.Height)));
         }
 
         static GraphicsPath Retangulo(Rectangle r, int raio)
@@ -344,6 +361,7 @@ namespace Overlay
         {
             config = Config.Carregar();
             medidorPing.DefinirAlvoReserva(config.AlvoPing);
+            AtualizarMonitorRede();
             DesregistrarAtalho();
             RegistrarAtalho();
             Redesenhar(true);
@@ -358,7 +376,38 @@ namespace Overlay
 
         void AoMudarTela(object sender, EventArgs e)
         {
+            if (IsDisposed || !IsHandleCreated) return;
+            if (InvokeRequired) { BeginInvoke((Action)(() => AoMudarTela(sender, e))); return; }
             Redesenhar(true);
+        }
+
+        void AtualizarMonitorRede()
+        {
+            bool detectar = config.DetectarServidorJogo && LeitorFps.EhAdministrador();
+            if (!detectar)
+            {
+                MonitorRede anterior = monitorRede;
+                monitorRede = null;
+                if (anterior != null) anterior.Dispose();
+                detectorServidor.DefinirAlvo(0);
+            }
+            else if (monitorRede == null)
+            {
+                var novo = new MonitorRede(detectorServidor, relogio);
+                if (novo.Iniciar()) monitorRede = novo;
+                else novo.Dispose();
+            }
+        }
+
+        void AtualizarDiagnostico()
+        {
+            itemDiagnosticoFps.Text = "FPS: " + leitorFps.Diagnostico +
+                (contadorTela == null ? "" : "; tela: " + (contadorTela.UltimoErro ?? "estimativa ativa"));
+            int? ms;
+            OrigemPing origem;
+            medidorPing.Ler(out ms, out origem);
+            itemDestinoPing.Text = "Ping: " + (medidorPing.DestinoAtual == null ? "aguardando destino" :
+                medidorPing.DestinoAtual + (origem == OrigemPing.ServidorDoJogo ? " (destino provável)" : " (alvo configurado)"));
         }
 
         void RegistrarAtalho()
@@ -394,6 +443,8 @@ namespace Overlay
                 return;
             }
             base.WndProc(ref m);
+            if (m.Msg == 0x02E0 && IsHandleCreated && !IsDisposed) // WM_DPICHANGED
+                BeginInvoke((Action)(() => { if (!IsDisposed) Redesenhar(true); }));
         }
 
         void AtualizarItemInicioAutomatico()

@@ -10,14 +10,13 @@ namespace Overlay
     // (a mesma do OBS e do compartilhamento de tela do Discord). Não toca no processo do jogo, não usa ETW e não precisa
     // de admin; serve quando o anticheat (ex.: EA Javelin no FC 27) faz o Windows recusar as sessões ETW do PresentMon.
     // A cada atualização da tela o Windows diz QUAIS retângulos mudaram; só conta se a mudança cai dentro da janela do jogo
-    // e fora da área ignorada (o próprio overlay). Assim outras janelas e os redesenhos do overlay não somam no FPS.
-    // Limite: mede o que chega ao monitor (teto = taxa de atualização da tela).
+    // e fora da área ignorada (o próprio overlay). Áreas ambíguas são descartadas; o compositor não informa o processo produtor.
+    // Limite: estima alterações visíveis (teto = taxa de atualização da tela), não confirma FPS renderizado.
     // Chamadas COM feitas pela vtable (índices do SDK do Windows; offsets x64, build /platform:x64).
     class ContadorTela : IDisposable
     {
         const int DXGI_ERROR_WAIT_TIMEOUT = unchecked((int)0x887A0027);
         const int DXGI_ERROR_ACCESS_LOST = unchecked((int)0x887A0026);
-        const int D3D_DRIVER_TYPE_HARDWARE = 1;
         const uint D3D11_SDK_VERSION = 7;
         const double JanelaMs = 1000;
         const double ValidadeMs = 1500;
@@ -27,7 +26,7 @@ namespace Overlay
         // Índices na vtable (IUnknown 0–2, IDXGIObject 3–6).
         const int VtQueryInterface = 0;
         const int VtRelease = 2;
-        const int VtDeviceGetAdapter = 7;
+        const int VtFactoryEnumAdapters1 = 12;
         const int VtAdapterEnumOutputs = 7;
         const int VtOutputGetDesc = 7;
         const int VtOutput1DuplicateOutput = 22;
@@ -36,13 +35,15 @@ namespace Overlay
         const int VtDuplicationGetFrameMoveRects = 10;
         const int VtDuplicationReleaseFrame = 14;
 
-        static readonly Guid IidDxgiDevice = new Guid("54ec77fa-1377-44e6-8c32-88fd5f44c84c");
+        static readonly Guid IidDxgiFactory1 = new Guid("770aae78-f26f-4dba-a829-253c83d1b387");
         // IID conferido no dxgi1_2.idl (Wine), que espelha o dxgi1_2.h do SDK.
         static readonly Guid IidDxgiOutput1 = new Guid("00cddea8-939b-4b83-a340-a685226666cc");
 
         [DllImport("d3d11.dll")]
         static extern int D3D11CreateDevice(IntPtr adaptador, int tipo, IntPtr software, uint flags, IntPtr niveis,
             uint quantidadeNiveis, uint versaoSdk, out IntPtr dispositivo, out int nivel, out IntPtr contexto);
+        [DllImport("dxgi.dll")]
+        static extern int CreateDXGIFactory1(ref Guid iid, out IntPtr fabrica);
         [DllImport("kernel32.dll")] static extern bool QueryPerformanceFrequency(out long frequencia);
         [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr janela, uint flags);
         [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
@@ -53,7 +54,6 @@ namespace Overlay
 
         [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int FnQueryInterface(IntPtr obj, ref Guid iid, out IntPtr saida);
         [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate uint FnRelease(IntPtr obj);
-        [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int FnGetAdapter(IntPtr obj, out IntPtr adaptador);
         [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int FnEnumOutputs(IntPtr obj, uint indice, out IntPtr saida);
         [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int FnGetDesc(IntPtr obj, IntPtr desc);
         [UnmanagedFunctionPointer(CallingConvention.StdCall)] delegate int FnDuplicateOutput(IntPtr obj, IntPtr dispositivo, out IntPtr duplicacao);
@@ -93,9 +93,8 @@ namespace Overlay
             lock (trava) areaIgnorada = area;
         }
 
-        // Quadros por segundo do jogo, ou null sem dados recentes.
-        // Usa o tempo entre o primeiro e o último quadro da janela de 1 s (como a CalculadoraFps), não a contagem:
-        // contar "quantos caíram no último segundo" erra ±1 quadro na borda, o que a 30 FPS já dá ±3%.
+        // Estimativa por intervalos consecutivos confiáveis na janela de 1 s; null sem observação suficiente.
+        // Marcadores de incerteza quebram a sequência sem contar atualizações nem duração desconhecida.
         public int? Fps()
         {
             long agora = Qpc();
@@ -103,19 +102,23 @@ namespace Overlay
             {
                 if (quadros.Count == 0 || MsEntre(ultimoQuadroQpc, agora) > ValidadeMs) return null;
                 Podar(agora);
-                if (quadros.Count < 2) return quadros.Count;
-                long primeiro = 0, ultimo = 0;
-                int depoisDoPrimeiro = 0;
-                bool comecou = false;
+                if (quadros.Count < 3) return null;
+                long anterior = 0, tempoConfiavel = 0;
+                int intervalos = 0;
+                bool anteriorValido = false;
                 foreach (KeyValuePair<long, int> q in quadros)
                 {
-                    if (!comecou) { primeiro = q.Key; comecou = true; continue; }
-                    depoisDoPrimeiro += q.Value;
-                    ultimo = q.Key;
+                    if (q.Value == 1 && anteriorValido && q.Key > anterior)
+                    {
+                        tempoConfiavel += q.Key - anterior;
+                        intervalos++;
+                    }
+                    anterior = q.Key;
+                    anteriorValido = q.Value == 1;
                 }
-                double ms = MsEntre(primeiro, ultimo);
-                if (ms <= 0) return null;
-                return (int)Math.Round(depoisDoPrimeiro * 1000.0 / ms);
+                double ms = MsEntre(0, tempoConfiavel);
+                if (intervalos < 2 || ms < 250) return null;
+                return (int)Math.Round(intervalos * 1000.0 / ms);
             }
         }
 
@@ -143,7 +146,7 @@ namespace Overlay
         // (troca de resolução, tela de UAC, tela cheia exclusiva) ou o jogo ir para outro monitor.
         void Duplicar()
         {
-            IntPtr dispositivo = IntPtr.Zero, contexto = IntPtr.Zero, dxgiDevice = IntPtr.Zero, adaptador = IntPtr.Zero;
+            IntPtr dispositivo = IntPtr.Zero, contexto = IntPtr.Zero, adaptador = IntPtr.Zero;
             IntPtr saida = IntPtr.Zero, saida1 = IntPtr.Zero, duplicacao = IntPtr.Zero;
             IntPtr info = Marshal.AllocHGlobal(48);   // DXGI_OUTDUPL_FRAME_INFO
             IntPtr desc = Marshal.AllocHGlobal(96);   // DXGI_OUTPUT_DESC
@@ -152,36 +155,14 @@ namespace Overlay
             try
             {
                 int nivel;
-                Checar(D3D11CreateDevice(IntPtr.Zero, D3D_DRIVER_TYPE_HARDWARE, IntPtr.Zero, 0, IntPtr.Zero, 0,
-                    D3D11_SDK_VERSION, out dispositivo, out nivel, out contexto), "D3D11CreateDevice");
-                Guid iid = IidDxgiDevice;
-                Checar(Metodo<FnQueryInterface>(dispositivo, VtQueryInterface)(dispositivo, ref iid, out dxgiDevice), "IDXGIDevice");
-                Checar(Metodo<FnGetAdapter>(dxgiDevice, VtDeviceGetAdapter)(dxgiDevice, out adaptador), "GetAdapter");
-
                 IntPtr monitorAlvo = MonitorFromWindow(janelaAlvo(), 2 /* MONITOR_DEFAULTTONEAREST */);
-                IntPtr monitorDuplicado = IntPtr.Zero;
-                Point origemMonitor = Point.Empty;
-                for (uint i = 0; ; i++)
-                {
-                    IntPtr candidata;
-                    if (Metodo<FnEnumOutputs>(adaptador, VtAdapterEnumOutputs)(adaptador, i, out candidata) != 0) break;
-                    Checar(Metodo<FnGetDesc>(candidata, VtOutputGetDesc)(candidata, desc), "GetDesc");
-                    IntPtr monitor = Marshal.ReadIntPtr(desc, 88); // DXGI_OUTPUT_DESC.Monitor
-                    // Fica com o monitor do jogo; se não achar, com o primeiro da placa.
-                    if (saida == IntPtr.Zero || monitor == monitorAlvo)
-                    {
-                        Liberar(ref saida);
-                        saida = candidata;
-                        monitorDuplicado = monitor;
-                        // DXGI_OUTPUT_DESC.DesktopCoordinates: os retângulos que mudaram vêm relativos a esse canto.
-                        origemMonitor = new Point(Marshal.ReadInt32(desc, 64), Marshal.ReadInt32(desc, 68));
-                        if (monitor == monitorAlvo) break;
-                    }
-                    else Liberar(ref candidata);
-                }
-                if (saida == IntPtr.Zero) throw new InvalidOperationException("nenhum monitor ligado a placa de video principal");
-
-                iid = IidDxgiOutput1;
+                EncontrarSaida(monitorAlvo, desc, out adaptador, out saida);
+                IntPtr monitorDuplicado = monitorAlvo;
+                Point origemMonitor = new Point(Marshal.ReadInt32(desc, 64), Marshal.ReadInt32(desc, 68));
+                // Adaptador explícito exige D3D_DRIVER_TYPE_UNKNOWN (0).
+                Checar(D3D11CreateDevice(adaptador, 0, IntPtr.Zero, 0, IntPtr.Zero, 0,
+                    D3D11_SDK_VERSION, out dispositivo, out nivel, out contexto), "D3D11CreateDevice");
+                Guid iid = IidDxgiOutput1;
                 Checar(Metodo<FnQueryInterface>(saida, VtQueryInterface)(saida, ref iid, out saida1), "IDXGIOutput1");
                 Checar(Metodo<FnDuplicateOutput>(saida1, VtOutput1DuplicateOutput)(saida1, dispositivo, out duplicacao), "DuplicateOutput");
                 UltimoErro = null;
@@ -192,6 +173,7 @@ namespace Overlay
                 FnReleaseFrame soltar = Metodo<FnReleaseFrame>(duplicacao, VtDuplicationReleaseFrame);
 
                 Rectangle areaJogo = AreaDoJogo(origemMonitor);
+                IntPtr alvoAnterior = janelaAlvo();
                 long proximaChecagem = Qpc() + frequenciaQpc / 4;
                 long proximaChecagemMonitor = Qpc() + frequenciaQpc;
                 while (!encerrando)
@@ -203,8 +185,11 @@ namespace Overlay
                     else
                     {
                         Checar(hr, "AcquireNextFrame");
+                        try
+                        {
                         long ultimoPresent = Marshal.ReadInt64(info, 0);
                         int acumulados = Marshal.ReadInt32(info, 16);
+                        bool agrupados = Marshal.ReadInt32(info, 20) != 0;
                         int tamanhoNecessario = Marshal.ReadInt32(info, 40);
                         // LastPresentTime = 0 é só o ponteiro do mouse se mexendo: não é quadro novo.
                         if (ultimoPresent != 0 && acumulados > 0)
@@ -219,12 +204,17 @@ namespace Overlay
                             lock (trava) ignorar = areaIgnorada;
                             ignorar.Offset(-origemMonitor.X, -origemMonitor.Y);
                             ignorar.Inflate(2, 2);
-                            if (tamanhoNecessario == 0 ||
-                                MudouNoJogo(duplicacao, movidos, sujos, metadados, tamanhoMetadados, areaJogo, ignorar))
-                                Registrar(ultimoPresent, acumulados);
+                            bool incerta = false;
+                            bool relevante = !areaJogo.IsEmpty && tamanhoNecessario > 0 &&
+                                MudouNoJogo(duplicacao, movidos, sujos, metadados, tamanhoMetadados, areaJogo, ignorar, out incerta);
+                            RegistrarAmostra(ultimoPresent, acumulados, agrupados || tamanhoNecessario == 0 || incerta, relevante);
                         }
-                        if (recurso != IntPtr.Zero) Liberar(ref recurso);
-                        soltar(duplicacao);
+                        }
+                        finally
+                        {
+                            if (recurso != IntPtr.Zero) Liberar(ref recurso);
+                            Checar(soltar(duplicacao), "ReleaseFrame");
+                        }
                     }
 
                     long agora = Qpc();
@@ -232,6 +222,8 @@ namespace Overlay
                     {
                         // A janela do jogo pode mudar de tamanho/posição (ou o jogo da frente pode mudar).
                         proximaChecagem = agora + frequenciaQpc / 4;
+                        IntPtr alvoAtual = janelaAlvo();
+                        if (alvoAtual != alvoAnterior) { LimparQuadros(); alvoAnterior = alvoAtual; }
                         areaJogo = AreaDoJogo(origemMonitor);
                     }
                     if (agora >= proximaChecagemMonitor)
@@ -248,7 +240,6 @@ namespace Overlay
                 Liberar(ref saida1);
                 Liberar(ref saida);
                 Liberar(ref adaptador);
-                Liberar(ref dxgiDevice);
                 Liberar(ref contexto);
                 Liberar(ref dispositivo);
                 Marshal.FreeHGlobal(metadados);
@@ -257,7 +248,67 @@ namespace Overlay
             }
         }
 
-        // Janela do jogo em coordenadas do monitor duplicado. Vazia = vale o monitor inteiro.
+        static void EncontrarSaida(IntPtr monitor, IntPtr desc, out IntPtr adaptador, out IntPtr saida)
+        {
+            adaptador = saida = IntPtr.Zero;
+            IntPtr fabrica = IntPtr.Zero;
+            Guid iid = IidDxgiFactory1;
+            try
+            {
+                Checar(CreateDXGIFactory1(ref iid, out fabrica), "CreateDXGIFactory1");
+                for (uint a = 0; ; a++)
+                {
+                    IntPtr placa;
+                    int hr = Metodo<FnEnumOutputs>(fabrica, VtFactoryEnumAdapters1)(fabrica, a, out placa);
+                    if (hr == unchecked((int)0x887A0002)) break; // DXGI_ERROR_NOT_FOUND
+                    Checar(hr, "EnumAdapters1");
+                    try
+                    {
+                        for (uint s = 0; ; s++)
+                        {
+                            IntPtr candidata;
+                            hr = Metodo<FnEnumOutputs>(placa, VtAdapterEnumOutputs)(placa, s, out candidata);
+                            if (hr == unchecked((int)0x887A0002)) break;
+                            Checar(hr, "EnumOutputs");
+                            try
+                            {
+                                Checar(Metodo<FnGetDesc>(candidata, VtOutputGetDesc)(candidata, desc), "GetDesc");
+                                if (Marshal.ReadIntPtr(desc, 88) != monitor) continue;
+                                adaptador = placa; placa = IntPtr.Zero;
+                                saida = candidata; candidata = IntPtr.Zero;
+                                return;
+                            }
+                            finally { Liberar(ref candidata); }
+                        }
+                    }
+                    finally { Liberar(ref placa); }
+                }
+                throw new InvalidOperationException("monitor da janela não encontrado nos adaptadores de vídeo");
+            }
+            finally { Liberar(ref fabrica); }
+        }
+
+        void LimparQuadros()
+        {
+            lock (trava) { quadros.Clear(); ultimoQuadroQpc = 0; }
+        }
+
+        internal void RegistrarAmostra(long qpc, int acumulados, bool agrupados, bool relevante)
+        {
+            // Não há como atribuir atualizações acumuladas do desktop a um processo específico.
+            if (acumulados != 1 || agrupados)
+            {
+                // Marca uma quebra: não conta quadros nem o intervalo que atravessa a amostra incerta.
+                Registrar(qpc, 0);
+                UltimoErro = "amostra incerta do desktop; aguardando novos quadros";
+                return;
+            }
+            if (!relevante) return;
+            UltimoErro = null;
+            Registrar(qpc, 1);
+        }
+
+        // Janela do jogo em coordenadas do monitor duplicado. Vazia = não medir.
         Rectangle AreaDoJogo(Point origemMonitor)
         {
             RECT r;
@@ -267,16 +318,29 @@ namespace Overlay
 
         // Algum retângulo movido ou "sujo" (redesenhado) caiu dentro do jogo e fora da área ignorada?
         static bool MudouNoJogo(IntPtr duplicacao, FnGetFrameRects movidos, FnGetFrameRects sujos, IntPtr buffer, int tamanho,
-            Rectangle areaJogo, Rectangle ignorar)
+            Rectangle areaJogo, Rectangle ignorar, out bool incerta)
         {
+            incerta = false;
+            bool relevante = false;
             uint usados;
             if (movidos(duplicacao, (uint)tamanho, buffer, out usados) >= 0)
                 for (int i = 0; i + TamanhoRetanguloMovido <= usados; i += TamanhoRetanguloMovido)
-                    if (Relevante(LerRetangulo(buffer, i + 8), areaJogo, ignorar)) return true;
+                    relevante |= ClassificarMudanca(LerRetangulo(buffer, i + 8), areaJogo, ignorar, ref incerta);
+            else incerta = true;
             if (sujos(duplicacao, (uint)tamanho, buffer, out usados) >= 0)
                 for (int i = 0; i + TamanhoRetangulo <= usados; i += TamanhoRetangulo)
-                    if (Relevante(LerRetangulo(buffer, i), areaJogo, ignorar)) return true;
-            return false;
+                    relevante |= ClassificarMudanca(LerRetangulo(buffer, i), areaJogo, ignorar, ref incerta);
+            else incerta = true;
+            return relevante;
+        }
+
+        internal static bool ClassificarMudanca(Rectangle mudanca, Rectangle areaJogo, Rectangle ignorar, ref bool incerta)
+        {
+            if (areaJogo.IsEmpty || !Relevante(mudanca, areaJogo, ignorar)) return false;
+            // O compositor pode invalidar todo o desktop sem marcar RectsCoalesced.
+            // Uma área que atravessa a borda do jogo não permite atribuir a atualização ao jogo.
+            if (!areaJogo.Contains(mudanca)) { incerta = true; return false; }
+            return true;
         }
 
         // Público para teste (tests\TesteContadorTela.cs): a regra de "isso é quadro do jogo?".
@@ -298,7 +362,7 @@ namespace Overlay
             lock (trava)
             {
                 quadros.Enqueue(new KeyValuePair<long, int>(qpc, acumulados));
-                ultimoQuadroQpc = Math.Max(ultimoQuadroQpc, qpc);
+                if (acumulados > 0) ultimoQuadroQpc = Math.Max(ultimoQuadroQpc, qpc);
                 Podar(Qpc());
             }
         }

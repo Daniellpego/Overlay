@@ -17,6 +17,9 @@ namespace Overlay
         readonly object trava = new object();
         readonly Dictionary<IPAddress, Queue<double>> pacotesPorIp = new Dictionary<IPAddress, Queue<double>>();
         volatile int pidAlvo;
+        IPAddress candidato;
+        double candidatoDesde;
+        const double EstabilidadeMs = 2000;
 
         // Leitura sem trava para o callback ETW descartar cedo os pacotes de outros processos.
         public bool EhAlvo(int pid)
@@ -31,6 +34,7 @@ namespace Overlay
                 if (pid == pidAlvo) return;
                 pidAlvo = pid;
                 pacotesPorIp.Clear();
+                candidato = null;
             }
         }
 
@@ -57,6 +61,7 @@ namespace Overlay
             {
                 IPAddress melhor = null;
                 int maisPacotes = MinimoPacotesNaJanela - 1;
+                int segundo = 0;
                 var vazios = new List<IPAddress>();
                 foreach (KeyValuePair<IPAddress, Queue<double>> par in pacotesPorIp)
                 {
@@ -64,12 +69,26 @@ namespace Overlay
                     if (par.Value.Count == 0) vazios.Add(par.Key);
                     else if (par.Value.Count > maisPacotes)
                     {
+                        segundo = Math.Max(segundo, melhor == null ? 0 : maisPacotes);
                         maisPacotes = par.Value.Count;
                         melhor = par.Key;
                     }
+                    else segundo = Math.Max(segundo, par.Value.Count);
                 }
                 foreach (IPAddress ip in vazios) pacotesPorIp.Remove(ip);
-                return melhor;
+                // Volume sozinho não prova identidade. Destinos empatados não são confiáveis.
+                if (melhor == null || maisPacotes < segundo * 1.25)
+                {
+                    candidato = null;
+                    return null;
+                }
+                if (!melhor.Equals(candidato))
+                {
+                    candidato = melhor;
+                    candidatoDesde = agoraMs;
+                    return null;
+                }
+                return agoraMs - candidatoDesde >= EstabilidadeMs ? candidato : null;
             }
         }
 

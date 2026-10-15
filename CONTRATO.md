@@ -50,3 +50,24 @@ elevada e inicia com o Windows. Config dela em `%LOCALAPPDATA%\Overlay` (só lid
    0 quedas, mesmo processo do início ao fim; CPU média 0,25% (pico 3,1%); RAM privada 17-24 MB, sem subir (23,5 MB nas
    10 primeiras x 21,4 MB nas 10 últimas); handles oscilando 484-677 sem tendência (606 no início, 615 no fim);
    12 prints mostrando FPS*, ms* e horário atualizados até o fim.
+
+6. Correções da revisão autorizadas no chat em 15/10/2026 — **validadas localmente; uso real pendente**:
+   - FPS normal: superfície com maior amostra, pelo menos 3 quadros e 250 ms de observação; rajadas auxiliares não vencem.
+   - FPS*: estimativa de alterações da janela ativa, não confirmação de FPS renderizado. Seleciona o adaptador do monitor.
+     Atualizações acumuladas, agrupadas e regiões que atravessam a borda da janela interrompem a amostra.
+     Calcula somente intervalos consecutivos confiáveis na janela de 1 s, exigindo 250 ms observados.
+     Incerteza contínua deixa `---`; mesmo com esses filtros, metadados do compositor não identificam o processo produtor.
+   - Ping: amostras separadas por IP. `ms?` indica destino UDP provável (2 s de liderança com vantagem de 25%),
+     sem confirmar identidade de servidor; `ms*` é o alvo configurado. IP e diagnóstico disponíveis no menu.
+   - Recarregar configuração aplica a detecção de rede. Posição limitada à tela e DPI por monitor V2 com fallback legado.
+   - Sem dados, prova incompleta retorna 2 (INCONCLUSIVO); divergência retorna 1; aprovação completa retorna 0.
+     FPS exige pares simultâneos em pelo menos 80% das amostras, com tolerância de 5% e teto do monitor.
+   - Scripts só podem encerrar a cópia de teste dentro do projeto; overlay instalado/execução desconhecida é preservado.
+   - `build.bat` sem avisos e `tests/verificar.ps1` completo: **Tudo OK**, incluindo 27 regressões novas.
+     Prova sintética: 30/60/90/120/144 FPS, erro máximo observado 0,7 quadro (0,6%); parado com ruído: 0.
+     Gabarito independente por tempos de desenhos GDI, nas mesmas janelas de 1 s; não é prova de apresentação real.
+     Ping contra Windows em três alvos: diferenças 0/-1/0 ms. Janela: 33,1 MB e 0,049% CPU (sem admin/PresentMon).
+     Foco, clique atravessando, atalho e instância única aprovados. Revisão independente concluída com achados corrigidos.
+     Projeto C# sem package.json: lint/build npm não se aplicam; compilador C# trata avisos como erro.
+   - Revalidar jogos/anticheat, consumo total com admin e telas de escalas diferentes no ambiente de uso.
+     O teste histórico de 1 h acima não comprova estabilidade desta revisão.

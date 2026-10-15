@@ -48,6 +48,7 @@ static class ProvaJogo
 
     static int Main(string[] args)
     {
+        Native.ConfigurarDpi();
         Console.Title = "Prova do overlay no jogo";
         // --ensaio <processo>: só para o Claude conferir o fluxo sem admin, mirando a janela de um processo, por 8 s.
         bool ensaio = args.Length >= 2 && args[0] == "--ensaio";
@@ -103,9 +104,13 @@ static class ProvaJogo
 
         var fpsPresentMon = new List<int>();
         var fpsTela = new List<int>();
+        var paresPresentMon = new List<int>();
+        var paresTela = new List<int>();
         var pingServidor = new List<int>();
         var pingReserva = new List<int>();
         IPAddress servidor = null;
+        IPAddress destinoMedido = null;
+        bool destinoMudou = false;
         int segundosForaDoJogo = 0;
         Console.WriteLine("Medindo " + duracao + " s...");
         Thread.Sleep(3000); // aquecimento
@@ -119,12 +124,19 @@ static class ProvaJogo
             int? b = contador.Fps();
             if (a.HasValue) fpsPresentMon.Add(a.Value);
             if (b.HasValue) fpsTela.Add(b.Value);
+            if (a.HasValue && b.HasValue) { paresPresentMon.Add(a.Value); paresTela.Add(b.Value); }
             IPAddress srv = detector.Servidor(relogio.Elapsed.TotalMilliseconds);
             if (srv != null) servidor = srv;
             int? ms;
             OrigemPing origem;
             ping.Ler(out ms, out origem);
-            if (ms.HasValue) (origem == OrigemPing.ServidorDoJogo ? pingServidor : pingReserva).Add(ms.Value);
+            if (ms.HasValue)
+            {
+                IPAddress destino = ping.DestinoAtual;
+                if (destinoMedido != null && !destinoMedido.Equals(destino)) destinoMudou = true;
+                destinoMedido = destino;
+                (origem == OrigemPing.ServidorDoJogo ? pingServidor : pingReserva).Add(ms.Value);
+            }
             Console.Write("\r{0,2}s  PresentMon: {1,4}  Tela: {2,4}  Ping: {3,4} ms {4}      ", s + 1,
                 a.HasValue ? a.Value.ToString() : "---", b.HasValue ? b.Value.ToString() : "---",
                 ms.HasValue ? ms.Value.ToString() : "---", origem == OrigemPing.ServidorDoJogo ? "(servidor)" : "(internet)");
@@ -140,6 +152,7 @@ static class ProvaJogo
         Dizer("");
         if (segundosForaDoJogo > 3) Dizer("ATENCAO: o jogo saiu da frente por " + segundosForaDoJogo + " s; a prova pode ter medido outra coisa.");
         int falhas = 0;
+        int inconclusivos = segundosForaDoJogo > 3 ? 1 : 0;
 
         // FPS: os dois métodos são independentes; se batem, o número está certo.
         Dizer("== FPS ==");
@@ -151,26 +164,27 @@ static class ProvaJogo
         if (fpsTela.Count == 0) Dizer("Tela (FPS*): sem dados.");
         else Dizer(string.Format("Tela (FPS*):               mediana {0}  (min {1}, max {2})", Mediana(fpsTela), Min(fpsTela), Max(fpsTela)));
 
-        if (fpsPresentMon.Count > 0 && fpsTela.Count > 0)
+        if (AvaliacaoProva.AmostrasSuficientes(paresPresentMon.Count, duracao))
         {
-            int pm = Mediana(fpsPresentMon), tela = Mediana(fpsTela);
+            int pm = Mediana(paresPresentMon), tela = Mediana(paresTela);
             bool ok;
             if (hz > 0 && pm >= hz - 3)
             {
                 // Jogo acima da taxa do monitor: a tela só mostra até hz.
-                ok = tela >= hz * 0.95;
+                ok = AvaliacaoProva.FpsCompativel(pm, tela, hz);
                 Dizer(string.Format("Comparacao: jogo a {0} FPS, acima dos {1} Hz do monitor; a tela mostra {2} (o maximo possivel). {3}",
                     pm, hz, tela, ok ? "OK" : "FALHA"));
             }
             else
             {
                 int diferenca = tela - pm;
-                ok = Math.Abs(diferenca) <= Math.Max(2, pm * 0.03);
+                ok = AvaliacaoProva.FpsCompativel(pm, tela, hz);
                 Dizer(string.Format("Comparacao: PresentMon {0} x Tela {1} -> diferenca {2:+0;-0;0}. {3}", pm, tela, diferenca,
                     ok ? "OK, os dois metodos batem" : "FALHA, os metodos discordam"));
             }
             if (!ok) falhas++;
         }
+        else { inconclusivos++; Dizer("FPS INCONCLUSIVO: faltam pares simultâneos válidos (mínimo 80% da medição)."); }
 
         // Ping: servidor da partida (se detectado) contra o ping.exe no mesmo IP.
         Dizer("");
@@ -179,13 +193,13 @@ static class ProvaJogo
             Dizer("Servidor da partida: nao detectado (fora de partida, ou eventos de rede bloqueados pelo anticheat). Overlay mostra ms*.");
         else
         {
-            Dizer("Servidor da partida detectado: " + servidor);
+            Dizer("Destino provável da partida: " + servidor + " (heurística; identidade não confirmada)");
             if (pingServidor.Count == 0) Dizer("O servidor nao responde a ping (comum em servidores de jogo). Overlay mostra ms* (internet).");
         }
         string alvo = servidor != null && pingServidor.Count > 0 ? servidor.ToString() : "1.1.1.1";
         List<int> doOverlay = servidor != null && pingServidor.Count > 0 ? pingServidor : pingReserva;
         List<int> doWindows = PingWindows(alvo, 10);
-        if (doOverlay.Count > 0 && doWindows.Count > 0)
+        if (!destinoMudou && AvaliacaoProva.AmostrasSuficientes(doOverlay.Count, duracao) && doWindows.Count >= 8)
         {
             int o = Mediana(doOverlay), w = Mediana(doWindows);
             bool ok = Math.Abs(o - w) <= Math.Max(3, w * 0.15);
@@ -193,10 +207,11 @@ static class ProvaJogo
             Dizer(string.Format("Ping {0}: overlay {1} ms x ping do Windows {2} ms -> {3}", alvo == "1.1.1.1" ? "da internet (1.1.1.1)" : "do servidor " + alvo,
                 o, w, ok ? "OK" : "FALHA"));
         }
-        else Dizer("Ping: sem leituras suficientes para comparar.");
+        else { inconclusivos++; Dizer("Ping INCONCLUSIVO: destino mudou ou faltam leituras suficientes para comparar."); }
 
         Dizer("");
-        Dizer(falhas == 0 ? "RESULTADO: tudo OK" : "RESULTADO: " + falhas + " falha(s)");
+        int codigo = AvaliacaoProva.CodigoResultado(falhas, inconclusivos);
+        Dizer(codigo == 0 ? "RESULTADO: tudo OK" : codigo == 1 ? "RESULTADO: " + falhas + " falha(s)" : "RESULTADO: INCONCLUSIVO (não comprova funcionamento)");
         try
         {
             string pasta = Path.Combine(Pastas.Programa, ".tmp");
@@ -213,7 +228,7 @@ static class ProvaJogo
             Console.WriteLine("Aperte qualquer tecla para fechar.");
             Console.ReadKey(true);
         }
-        return falhas == 0 ? 0 : 1;
+        return codigo;
     }
 
     static int TaxaDoMonitor(IntPtr janela)
